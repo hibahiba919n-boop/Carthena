@@ -127,15 +127,12 @@ function AppContent({ showAI, setShowAI }: { showAI: boolean, setShowAI: (v: boo
                 <h4 className="font-bold text-xs tracking-widest mb-6 opacity-30">SHOP</h4>
                 <ul className="space-y-4">
                   <li><Link to="/shop" className="hover:underline">All Products</Link></li>
-                  <li><Link to="/shop" className="hover:underline">New Arrivals</Link></li>
-                  <li><Link to="/shop" className="hover:underline">Essentials</Link></li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-bold text-xs tracking-widest mb-6 opacity-30">SERVICES</h4>
                 <ul className="space-y-4">
                   <li><button onClick={() => setShowAI(true)} className="hover:underline text-left">AI Stylist</button></li>
-                  <li><Link to="/admin" className="hover:underline">Admin Panel</Link></li>
                 </ul>
               </div>
             </div>

@@ -48,7 +48,7 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
       }]);
     } catch (error) {
       console.error(error);
-      setMessages(prev => [...prev, { role: 'model', text: "Désolé, je rencontre une petite difficulté technique. Peux-tu reformuler ?" }]);
+      setMessages(prev => [...prev, { role: 'model', text: "Veuillez m'excuser, je rencontre une difficulté technique momentanée. Pourriez-vous reformuler votre demande, s'il vous plaît ?" }]);
     } finally {
       setIsLoading(false);
     }
@@ -84,8 +84,8 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black uppercase tracking-tight">AI Stylist</h2>
-                  <p className="text-[10px] font-black tracking-widest opacity-30">POWERED BY GEMINI 3.0</p>
+                  <h2 className="text-xl font-black uppercase tracking-tight">Hamza</h2>
+                  <p className="text-[10px] font-black tracking-widest opacity-30">VOTRE STYLISTE PERSONNEL</p>
                 </div>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-zinc-100 rounded-full">
@@ -102,10 +102,10 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
                   </div>
                   <h3 className="text-2xl font-black uppercase mb-4">Besoin d'aide pour votre look ?</h3>
                   <p className="text-zinc-500 font-light text-sm leading-relaxed mb-8">
-                    "Je cherche un look old money pour un dîner" / "Suggère-moi quelque chose de baggy"
+                    "Je cherche un look casual pour le week-end" / "Suggère-moi un costume élégant"
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {['STREETWEAR', 'OLD MONEY', 'MINIMALIST'].map(t => (
+                    {['STREETWEAR', 'OLD MONEY', 'CASUAL', 'COSTUMES', 'SURVETEMENTS'].map(t => (
                       <button 
                         key={t}
                         onClick={() => setInput(t)}
@@ -129,31 +129,40 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
                     
                     {m.data && (
                        <div className="mt-8 pt-8 border-t border-zinc-100">
-                          <p className="text-[10px] font-black tracking-widest opacity-30 uppercase mb-4">Recommandations Styliste</p>
-                          <div className="grid grid-cols-1 gap-4">
-                            {m.data.productIds.map(pid => {
-                              const p = findProduct(pid);
-                              if (!p) return null;
-                              return (
-                                <Link 
-                                  key={pid} 
-                                  to={`/product/${p.id}`}
-                                  onClick={onClose}
-                                  className="flex items-center gap-4 bg-zinc-50 p-4 hover:bg-zinc-100 transition-colors border border-zinc-100"
-                                >
-                                  <img src={p.imageUrl} className="w-12 h-16 object-cover" />
-                                  <div className="flex-grow">
-                                    <p className="text-xs font-bold uppercase tracking-tight">{p.name}</p>
-                                    <p className="text-[10px] font-mono opacity-50">{p.price.toLocaleString()} DZD</p>
-                                  </div>
-                                  <ArrowRight size={14} className="opacity-30" />
-                                </Link>
-                              );
-                            })}
-                          </div>
+                          {m.data.productIds && m.data.productIds.length > 0 && (
+                            <>
+                              <p className="text-[10px] font-black tracking-widest opacity-30 uppercase mb-4">Recommandations Styliste</p>
+                              <div className="grid grid-cols-1 gap-4">
+                                {m.data.productIds.map(pid => {
+                                  const p = findProduct(pid);
+                                  if (!p) return null;
+                                  return (
+                                    <Link 
+                                      key={pid} 
+                                      to={`/product/${p.id}`}
+                                      onClick={onClose}
+                                      className="flex items-center gap-4 bg-zinc-50 p-4 hover:bg-zinc-100 transition-colors border border-zinc-100"
+                                    >
+                                      <img src={p.imageUrl} className="w-12 h-16 object-cover" />
+                                      <div className="flex-grow">
+                                        <p className="text-xs font-bold uppercase tracking-tight">{p.name}</p>
+                                        <p className="text-[10px] font-mono opacity-50">{p.price.toLocaleString()} DZD</p>
+                                      </div>
+                                      <ArrowRight size={14} className="opacity-30" />
+                                    </Link>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
                           {m.data.outfitSuggestion && (
-                            <div className="mt-8 p-4 bg-zinc-900 text-beige text-xs font-light italic leading-relaxed">
+                            <div className="mt-6 p-4 bg-zinc-900 text-beige text-xs font-light italic leading-relaxed">
                               " {m.data.outfitSuggestion} "
+                            </div>
+                          )}
+                          {m.data.styleTip && (
+                            <div className="mt-4 p-4 bg-zinc-50 text-zinc-600 text-[10px] font-mono font-bold tracking-widest uppercase border border-zinc-200">
+                              💡 Style Tip: {m.data.styleTip}
                             </div>
                           )}
                        </div>

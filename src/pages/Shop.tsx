@@ -2,11 +2,11 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Filter, X, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getProducts, Product } from '../services/store';
+import { getProducts, Product, CATEGORIES } from '../services/store';
 
 export default function Shop() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [activeFilter, setActiveFilter] = useState<'all' | Product['style']>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -19,7 +19,7 @@ export default function Shop() {
     });
   }, []);
 
-  const styles = ['baggy', 'oversize', 'old money', 'streetwear', 'minimalist'];
+  const styles = CATEGORIES;
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { 
   Package, 
   ShoppingBag, 
@@ -24,7 +26,8 @@ import {
   deleteProduct, 
   updateOrderStatus,
   Product, 
-  Order 
+  Order,
+  CATEGORIES
 } from '../services/store';
 
 export default function Admin() {
@@ -96,9 +99,9 @@ export default function Admin() {
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+  const handleUpdateOrderStatus = async (orderId: string, status: string, productId?: string) => {
     try {
-      await updateOrderStatus(orderId, status as any);
+      await updateOrderStatus(orderId, status as any, productId);
       await refreshData();
     } catch (err: any) {
       alert("Erreur lors de la mise à jour du statut: " + (err.message || "Erreur inconnue") + ". Vérifiez si votre table accepte le statut '" + status + "'");
@@ -113,6 +116,28 @@ export default function Admin() {
   }, 0);
 
   const totalSales = (orders || []).filter(o => o.status !== 'refused').length;
+  const pendingOrdersCount = (orders || []).filter(o => o.status === 'pending').length;
+  const lowStockItemsCount = (products || []).filter(p => p.stock < 5).length;
+  const deliveredOrdersCount = (orders || []).filter(o => o.status === 'delivered').length;
+
+  const last7Days = Array.from({length: 7}, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    return d.toISOString().split('T')[0];
+  }).reverse();
+
+  const chartData = last7Days.map(date => {
+    const dayOrders = (orders || []).filter(o => o.status !== 'refused' && o.createdAt.startsWith(date));
+    const dayRevenue = dayOrders.reduce((acc, order) => {
+      const prod = (products || []).find(p => p.id === order.productId);
+      return acc + (prod?.isOnPromo ? (prod.discountedPrice || prod.price) : (prod?.price || 0));
+    }, 0);
+    return {
+      date: date.split('-').slice(1).join('/'),
+      sales: dayOrders.length,
+      revenue: dayRevenue
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#F8F8F6]">
@@ -166,32 +191,105 @@ export default function Admin() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+            className="space-y-8"
           >
-            <div className="premium-card p-10">
-              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Gross Revenue</span>
-              <div className="flex items-center justify-between">
-                <span className="text-4xl font-black">{totalRevenue.toLocaleString()} DZD</span>
-                <div className="bg-green-100 text-green-700 p-2 rounded-full">
-                  <ArrowUpRight size={20} />
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="premium-card p-8">
+                <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Gross Revenue</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black">{totalRevenue.toLocaleString()} <span className="text-sm opacity-50">DZD</span></span>
+                  <div className="bg-green-100 text-green-700 p-2 rounded-full">
+                    <ArrowUpRight size={16} />
+                  </div>
+                </div>
+              </div>
+              <div className="premium-card p-8">
+                <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Total Sales</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black">{totalSales}</span>
+                  <div className="bg-zinc-100 text-ink p-2 rounded-full">
+                    <ShoppingBag size={16} />
+                  </div>
+                </div>
+              </div>
+              <div className="premium-card p-8 border-yellow-200 bg-yellow-50/30">
+                <span className="text-[10px] font-black tracking-widest opacity-50 block mb-2 uppercase text-yellow-800">Pending Logistics</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black text-yellow-800">{pendingOrdersCount}</span>
+                  <div className="bg-yellow-100 text-yellow-700 p-2 rounded-full">
+                    <Clock size={16} />
+                  </div>
+                </div>
+              </div>
+              <div className="premium-card p-8 border-red-200 bg-red-50/30">
+                <span className="text-[10px] font-black tracking-widest opacity-50 block mb-2 uppercase text-red-800">Low Stock Alerts</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-black text-red-800">{lowStockItemsCount} <span className="text-sm opacity-50">SKU</span></span>
+                  <div className="bg-red-100 text-red-700 p-2 rounded-full">
+                    <Package size={16} />
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="premium-card p-10">
-              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Total Sales</span>
-              <div className="flex items-center justify-between">
-                <span className="text-4xl font-black">{totalSales}</span>
-                <div className="bg-zinc-100 text-ink p-2 rounded-full">
-                  <ShoppingBag size={20} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 premium-card p-8">
+                <h3 className="text-[10px] font-black tracking-widest opacity-30 uppercase mb-8">Revenue (Last 7 Days)</h3>
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f4f4f5" />
+                      <XAxis 
+                        dataKey="date" 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: '#a1a1aa' }}
+                        dy={10}
+                      />
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 10, fill: '#a1a1aa' }}
+                        dx={-10}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f4f4f5' }}
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Bar dataKey="revenue" fill="#18181b" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-            </div>
-            <div className="premium-card p-10">
-              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Catalog Health</span>
-              <div className="flex items-center justify-between">
-                <span className="text-4xl font-black">{products.length} SKU</span>
-                <div className="bg-zinc-100 text-ink p-2 rounded-full">
-                  <Package size={20} />
+
+              <div className="premium-card p-8 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-[10px] font-black tracking-widest opacity-30 uppercase mb-8">System Health</h3>
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-2">
+                        <span>Delivery Success</span>
+                        <span>{totalSales > 0 ? Math.round((deliveredOrdersCount / totalSales) * 100) : 0}%</span>
+                      </div>
+                      <div className="w-full bg-zinc-100 h-2 rounded-full overflow-hidden">
+                        <div className="bg-green-500 h-full" style={{ width: `${totalSales > 0 ? (deliveredOrdersCount / totalSales) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs font-bold mb-2">
+                        <span>Catalog Active</span>
+                        <span>{products.length} Items</span>
+                      </div>
+                      <div className="w-full bg-zinc-100 h-2 rounded-full overflow-hidden">
+                        <div className="bg-ink h-full w-full" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 pt-8 border-t border-zinc-100">
+                  <Link to="/" className="btn-primary w-full flex items-center justify-center gap-2 text-xs py-3">
+                    <ShoppingBag size={14} /> VIEW STOREFRONT
+                  </Link>
                 </div>
               </div>
             </div>
@@ -313,7 +411,7 @@ export default function Admin() {
                           </span>
                           
                           {order.status === 'pending' && (
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 mt-2">
                               <button 
                                 onClick={() => handleUpdateOrderStatus(order.id, 'processed')}
                                 className="flex-1 bg-green-600 text-white p-1 flex justify-center hover:bg-green-700 transition-colors"
@@ -327,6 +425,25 @@ export default function Admin() {
                                 title="Refuse"
                               >
                                 <Ban size={14} />
+                              </button>
+                            </div>
+                          )}
+                          
+                          {order.status === 'processed' && (
+                            <div className="flex gap-1 mt-2">
+                              <button 
+                                onClick={() => handleUpdateOrderStatus(order.id, 'delivered', order.productId)}
+                                className="flex-1 bg-ink text-beige py-1 text-[9px] uppercase font-black tracking-widest hover:bg-zinc-800 transition-colors"
+                                title="Mark as Delivered (-1 Stock)"
+                              >
+                                Livré
+                              </button>
+                              <button 
+                                onClick={() => handleUpdateOrderStatus(order.id, 'refused')}
+                                className="flex-1 bg-zinc-200 text-ink py-1 text-[9px] uppercase font-black tracking-widest hover:bg-zinc-300 transition-colors"
+                                title="Mark as Returned (Stock unchanged)"
+                              >
+                                Retour
                               </button>
                             </div>
                           )}
@@ -374,11 +491,9 @@ export default function Admin() {
               <div className="col-span-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Style</label>
                 <select required name="style" defaultValue={editingProduct?.style} className="input-field">
-                  <option value="baggy">BAGGY</option>
-                  <option value="oversize">OVERSIZE</option>
-                  <option value="old money">OLD MONEY</option>
-                  <option value="streetwear">STREETWEAR</option>
-                  <option value="minimalist">MINIMALIST</option>
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat.toUpperCase()}</option>
+                  ))}
                 </select>
               </div>
               <div className="col-span-1">

@@ -6,7 +6,7 @@ export interface Product {
   name: string;
   price: number;
   brand: string;
-  style: 'baggy' | 'oversize' | 'old money' | 'streetwear' | 'minimalist';
+  style: string;
   description: string;
   imageUrl: string;
   stock: number;
@@ -29,6 +29,15 @@ export interface Order {
 
 const PRODUCTS_KEY = 'carthena_products';
 const ORDERS_KEY = 'carthena_orders';
+
+export const CATEGORIES = [
+  'baggy', 'oversize', 'old money', 'streetwear', 'minimalist', 
+  'jeans', 'survetements', 'polo', 'chemises', 'costumes', 
+  'sportswear', 'casual', 'sneakers', 'accessoires', 'vestes', 
+  'manteaux', 't-shirts', 'pulls', 'shorts', 'pantalons', 
+  'vintage', 'y2k', 'gothique', 'techwear', 'luxe', 
+  'robes', 'jupes', 'maillots', 'loungewear', 'cargos', 'denim'
+];
 
 // Initial Mock Data
 const INITIAL_PRODUCTS: Product[] = [
@@ -159,7 +168,19 @@ export const deleteProduct = async (id: string) => {
     const targetId = isProbablyNumeric ? Number(id) : id;
     
     console.log(`Store: Supabase delete target ID:`, targetId, `(type: ${typeof targetId})`);
+
+    // D'abord, supprimer les commandes liées pour éviter l'erreur de contrainte de clé étrangère (Foreign Key Constraint)
+    console.log(`Store: Deleting related orders for product ${targetId}`);
+    const { error: orderError } = await supabase!
+      .from('orders')
+      .delete()
+      .eq('product_id', targetId);
+      
+    if (orderError) {
+      console.error('Store: Failed to delete related orders:', orderError);
+    }
     
+    // Ensuite, supprimer le produit
     const { error, count } = await supabase!
       .from('products')
       .delete({ count: 'exact' })
@@ -175,6 +196,7 @@ export const deleteProduct = async (id: string) => {
     // If we didn't delete anything, it might be due to ID mismatch or RLS
     if (count === 0) {
       console.warn("Store: No rows deleted from Supabase. Attempting fallback with string ID...");
+      await supabase!.from('orders').delete().eq('product_id', id); // Fallback for orders
       const { error: errorString } = await supabase!
         .from('products')
         .delete()
@@ -252,7 +274,7 @@ export const saveOrder = async (order: Order) => {
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
 };
 
-export const updateOrderStatus = async (orderId: string, status: string) => {
+export const updateOrderStatus = async (orderId: string, status: string, productId?: string) => {
   if (isSupabaseActive()) {
     const targetId = (orderId.length < 10 && !isNaN(Number(orderId))) ? Number(orderId) : orderId;
 
@@ -268,6 +290,23 @@ export const updateOrderStatus = async (orderId: string, status: string) => {
       }
       throw new Error(`Supabase error: ${error.message}. (Assurez-vous d'avoir exécuté le SQL des permissions UPDATE)`);
     }
+
+    if (status === 'delivered' && productId) {
+      const prodId = (productId.length < 15 && !isNaN(Number(productId))) ? Number(productId) : productId;
+      const { data: product } = await supabase!
+        .from('products')
+        .select('stock')
+        .eq('id', prodId)
+        .single();
+        
+      if (product && typeof product.stock === 'number') {
+        const newStock = Math.max(0, product.stock - 1);
+        await supabase!
+          .from('products')
+          .update({ stock: newStock })
+          .eq('id', prodId);
+      }
+    }
   }
 
   const stored = localStorage.getItem(ORDERS_KEY);
@@ -279,12 +318,25 @@ export const updateOrderStatus = async (orderId: string, status: string) => {
       localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
     }
   }
+
+  if (status === 'delivered' && productId) {
+    const storedProd = localStorage.getItem(PRODUCTS_KEY);
+    if (storedProd) {
+      const products = JSON.parse(storedProd) as Product[];
+      const pIdx = products.findIndex(p => String(p.id) === String(productId));
+      if (pIdx >= 0) {
+         products[pIdx].stock = Math.max(0, products[pIdx].stock - 1);
+         localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+      }
+    }
+  }
 };
 
 export interface AIResponse {
-  analysis: string;
+  analysis?: string;
   recommendation: string;
-  outfitSuggestion: string;
+  outfitSuggestion?: string;
+  styleTip?: string;
   productIds: string[];
 }
 
@@ -297,23 +349,27 @@ export const getAIStylistRecommendation = async (
   const products = await getProducts();
 
   const systemInstructions = `
-    Tu es un styliste expert en mode (streetwear, old money, oversize, minimalist).
-    Ta mission est d'aider l'utilisateur à trouver son style et de lui recommander des produits de notre catalogue en DZD (Dinnars Algériens).
+    Tu es "Hamza", le conseiller en image IA exclusif et prestigieux de la Maison CARTHENA. 
+    Ta mission est d'offrir une expérience client exceptionnelle, chaleureuse mais toujours vouvoyée, avec un vocabulaire pointu mêlant luxe et modernité (streetwear, old money, casual chic).
 
-    Voici les produits disponibles en magasin:
+    RÈGLES DE CONDUITE (TRÈS IMPORTANT):
+    1. VOUVOYEMENT ET ÉLÉGANCE : Vouvoie systématiquement le client. Sois courtois, raffiné, mais accessible et passionné par la mode.
+    2. SOUPLESSE ET DIALOGUE : 
+       - Si le client dit juste "bonjour", réponds chaleureusement en te présentant (Hamza) et demande comment tu peux l'aider, SANS forcer de vêtements.
+       - Si le client pose une question de style générale (ex: "comment s'habiller pour un date"), donne des conseils experts en couleurs, matières, et coupes.
+    3. HORS-SUJET : Si la question n'a absolument aucun rapport avec la mode ou le lifestyle, réponds avec un trait d'esprit ou d'humour élégant, puis ramène la conversation sur le style vestimentaire.
+    4. RECOMMANDATIONS PRODUITS : Ne propose des articles de la boutique QUE si c'est pertinent par rapport à la demande. Laisse la liste "productIds" vide si ce n'est pas le moment de vendre.
+    5. LE "STYLE TIP" : Ajoute toujours une petite astuce mode secrète ou un conseil de styliste en bonus ("styleTip").
+
+    Voici le catalogue actuel de la boutique CARTHENA (en DZD) :
     ${JSON.stringify(products, null, 2)}
 
-    CONSIGNES:
-    - Analyse le besoin de l'utilisateur (Style, Occasion, Préférence).
-    - Propose UNIQUEMENT des produits existants dans la liste ci-dessus en citant leurs noms exacts.
-    - Utilise les "id" fournis pour la sélection technique.
-    - Sois simple, stylé et donne des suggestions concrètes.
-    - Toutes les mentions de prix doivent être en DZD.
-    - Format de réponse attendu (JSON uniquement):
+    Format de réponse attendu (JSON uniquement, sois très rigoureux sur les clés) :
     {
-      "analysis": "Analyse du style demandé",
-      "recommendation": "Ta recommandation personnalisée",
-      "outfitSuggestion": "Une idée de tenue complète",
+      "analysis": "Analyse rapide de la demande (optionnel)",
+      "recommendation": "Ta réponse principale au client (chaleureuse, experte, formelle)",
+      "outfitSuggestion": "Une idée de tenue complète si pertinent (optionnel)",
+      "styleTip": "Une petite astuce de styliste (ex: 'Roulez vos manches pour un look plus décontracté...')",
       "productIds": ["liste", "des", "ids", "des", "produits", "recommandés"]
     }
   `;
