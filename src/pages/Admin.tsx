@@ -1,0 +1,424 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Package, 
+  ShoppingBag, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  BarChart3, 
+  LayoutDashboard,
+  CheckCircle2,
+  Clock,
+  ArrowUpRight,
+  ArrowRight,
+  User,
+  X,
+  Check,
+  Ban
+} from 'lucide-react';
+import { 
+  getProducts, 
+  getOrders, 
+  saveProduct, 
+  deleteProduct, 
+  updateOrderStatus,
+  Product, 
+  Order 
+} from '../services/store';
+
+export default function Admin() {
+  const [activeTab, setActiveTab] = useState<'stats' | 'products' | 'orders'>('stats');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const refreshData = async () => {
+    const [p, o] = await Promise.all([getProducts(), getOrders()]);
+    setProducts(p || []);
+    setOrders(o || []);
+  };
+
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      const id = editingProduct?.id || Math.random().toString(36).substr(2, 9);
+      
+      const newProduct: Product = {
+        id,
+        name: formData.get('name') as string,
+        price: Number(formData.get('price')),
+        brand: formData.get('brand') as string,
+        style: formData.get('style') as any,
+        description: formData.get('description') as string,
+        imageUrl: formData.get('imageUrl') as string,
+        stock: Number(formData.get('stock')),
+        isOnPromo: formData.get('isOnPromo') === 'on',
+        discountedPrice: Number(formData.get('discountedPrice')) || undefined,
+        createdAt: editingProduct?.createdAt || new Date().toISOString()
+      };
+
+      await saveProduct(newProduct);
+      await refreshData();
+      setIsAddingProduct(false);
+      setEditingProduct(null);
+    } catch (err) {
+      alert("Error saving product. Check console or Supabase RLS.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    console.log("Admin: Requesting delete for product ID:", id);
+    if (confirm('Êtes-vous sûr de vouloir supprimer cet article définitivement ?')) {
+      setDeletingId(id);
+      try {
+        await deleteProduct(id);
+        console.log("Admin: Delete successful, refreshing data...");
+        await refreshData();
+      } catch (err: any) {
+        console.error("Admin: Delete error:", err);
+        alert("Erreur lors de la suppression: " + (err.message || "Erreur inconnue") + "\n\nID: " + id + "\n\nNote: La suppression peut échouer si l'article est lié à des commandes existantes.");
+      } finally {
+        setDeletingId(null);
+      }
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, status: string) => {
+    try {
+      await updateOrderStatus(orderId, status as any);
+      await refreshData();
+    } catch (err: any) {
+      alert("Erreur lors de la mise à jour du statut: " + (err.message || "Erreur inconnue") + ". Vérifiez si votre table accepte le statut '" + status + "'");
+    }
+  };
+
+  // Stats
+  const totalRevenue = (orders || []).reduce((acc, order) => {
+    if (order.status === 'refused') return acc;
+    const prod = (products || []).find(p => p.id === order.productId);
+    return acc + (prod?.isOnPromo ? (prod.discountedPrice || prod.price) : (prod?.price || 0));
+  }, 0);
+
+  const totalSales = (orders || []).filter(o => o.status !== 'refused').length;
+
+  return (
+    <div className="min-h-screen bg-[#F8F8F6]">
+      {/* Admin Dedicated Brand Bar */}
+      <div className="bg-white border-b border-zinc-200 px-6 h-16 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-6">
+          <Link to="/" className="text-xl font-black tracking-tighter">CARTHENA</Link>
+          <div className="h-4 w-px bg-zinc-200 hidden md:block" />
+          <span className="hidden md:block text-[10px] font-black tracking-[0.2em] text-zinc-400 uppercase">Control Center</span>
+        </div>
+        <div className="flex items-center gap-6">
+          <Link to="/" className="text-[10px] font-black tracking-widest text-zinc-500 hover:text-zinc-900 transition-colors flex items-center gap-2">
+            VIEW STORE <ArrowRight size={12} />
+          </Link>
+          <div className="h-8 w-8 rounded-full bg-zinc-100 flex items-center justify-center border border-zinc-200">
+            <User size={14} className="text-zinc-600" />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 border-b border-zinc-100 pb-8">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight uppercase">Admin Console</h1>
+            <p className="text-zinc-500 text-sm font-mono mt-1">OPERATIONAL CONTROL UNIT V1.0</p>
+          </div>
+
+        <div className="flex bg-white border border-zinc-200 mt-6 md:mt-0 overflow-x-auto max-w-full no-scrollbar">
+          {[
+            { id: 'stats', label: 'ANALYTICS', icon: BarChart3 },
+            { id: 'products', label: 'INVENTORY', icon: Package },
+            { id: 'orders', label: 'LOGISTICS', icon: ShoppingBag },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 text-[9px] md:text-[10px] font-black tracking-[0.15em] md:tracking-[0.2em] transition-colors whitespace-nowrap ${
+                activeTab === tab.id ? 'bg-ink text-beige' : 'hover:bg-zinc-50 text-zinc-400'
+              }`}
+            >
+              <tab.icon size={14} className="flex-shrink-0" /> {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <AnimatePresence mode="wait">
+        {activeTab === 'stats' && (
+          <motion.div
+            key="stats"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-8"
+          >
+            <div className="premium-card p-10">
+              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Gross Revenue</span>
+              <div className="flex items-center justify-between">
+                <span className="text-4xl font-black">{totalRevenue.toLocaleString()} DZD</span>
+                <div className="bg-green-100 text-green-700 p-2 rounded-full">
+                  <ArrowUpRight size={20} />
+                </div>
+              </div>
+            </div>
+            <div className="premium-card p-10">
+              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Total Sales</span>
+              <div className="flex items-center justify-between">
+                <span className="text-4xl font-black">{totalSales}</span>
+                <div className="bg-zinc-100 text-ink p-2 rounded-full">
+                  <ShoppingBag size={20} />
+                </div>
+              </div>
+            </div>
+            <div className="premium-card p-10">
+              <span className="text-[10px] font-black tracking-widest opacity-30 block mb-2 uppercase">Catalog Health</span>
+              <div className="flex items-center justify-between">
+                <span className="text-4xl font-black">{products.length} SKU</span>
+                <div className="bg-zinc-100 text-ink p-2 rounded-full">
+                  <Package size={20} />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'products' && (
+          <motion.div 
+            key="products"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-8"
+          >
+            <button 
+              onClick={() => setIsAddingProduct(true)}
+              className="btn-primary w-full md:w-auto flex items-center justify-center gap-2"
+            >
+              <Plus size={18} /> ADD NEW PRODUCT
+            </button>
+
+            <div className="bg-white border border-zinc-200 overflow-x-auto">
+              <table className="w-full text-left min-w-[800px]">
+                <thead className="bg-zinc-50 border-b border-zinc-100 font-black text-[10px] tracking-widest uppercase">
+                  <tr>
+                    <th className="p-6">Product</th>
+                    <th className="p-6">Style</th>
+                    <th className="p-6">Price</th>
+                    <th className="p-6">Stock</th>
+                    <th className="p-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {products.map(product => (
+                    <tr key={product.id} className="hover:bg-zinc-50/50 transition-colors">
+                      <td className="p-6">
+                        <div className="flex items-center gap-4">
+                          <img src={product.imageUrl} className="w-12 h-16 object-cover bg-zinc-100" />
+                          <div>
+                            <p className="font-bold">{product.name}</p>
+                            <p className="text-xs opacity-50 uppercase">{product.brand}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-6 text-xs font-bold opacity-50 uppercase tracking-widest">{product.style}</td>
+                      <td className="p-6 font-bold">{product.price.toLocaleString()} DZD</td>
+                      <td className="p-6">
+                        <span className={`text-xs font-black px-2 py-1 ${product.stock < 5 ? 'bg-red-100 text-red-600' : 'bg-zinc-100'}`}>
+                          {product.stock} UNITS
+                        </span>
+                      </td>
+                      <td className="p-6 text-right">
+                        <div className="flex justify-end gap-3">
+                          <button 
+                            onClick={() => setEditingProduct(product)}
+                            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
+                          >
+                            <Edit3 size={14} /> MODIFIER
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(product.id)}
+                            disabled={deletingId === product.id}
+                            className={`flex items-center gap-2 px-4 py-2 rounded text-[10px] font-black uppercase tracking-widest transition-colors shadow-md ${
+                              deletingId === product.id 
+                                ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" 
+                                : "bg-red-600 hover:bg-red-700 text-white"
+                            }`}
+                          >
+                            <Trash2 size={14} /> {deletingId === product.id ? "CHARGEMENT..." : "SUPPRIMER"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        )}
+
+        {activeTab === 'orders' && (
+          <motion.div 
+            key="orders"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-white border border-zinc-200 overflow-x-auto"
+          >
+            <table className="w-full text-left min-w-[900px]">
+                <thead className="bg-zinc-50 border-b border-zinc-100 font-black text-[10px] tracking-widest uppercase">
+                  <tr>
+                    <th className="p-6">Order ID</th>
+                    <th className="p-6">Customer</th>
+                    <th className="p-6">Phone / Wilaya</th>
+                    <th className="p-6">Product</th>
+                    <th className="p-6">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {orders.map(order => (
+                    <tr key={order.id} className="hover:bg-zinc-50/50 transition-colors">
+                      <td className="p-6 font-mono text-[10px] opacity-50">#{order.id}</td>
+                      <td className="p-6">
+                        <p className="font-bold">{order.customerFirstName} {order.customerLastName}</p>
+                        <p className="text-[10px] opacity-40 uppercase">{new Date(order.createdAt).toLocaleDateString()}</p>
+                      </td>
+                      <td className="p-6">
+                        <p className="text-sm font-medium">{order.phone}</p>
+                        <p className="text-xs opacity-50 uppercase">{order.wilaya}</p>
+                      </td>
+                      <td className="p-6 font-bold truncate max-w-[150px]">{order.productName}</td>
+                      <td className="p-6">
+                        <div className="flex flex-col gap-2">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-widest ${
+                            order.status === 'pending' ? 'bg-yellow-50 text-yellow-700' :
+                            order.status === 'processed' ? 'bg-blue-50 text-blue-700' :
+                            order.status === 'refused' ? 'bg-red-50 text-red-700' :
+                            'bg-green-50 text-green-700'
+                          }`}>
+                            <Clock size={10} /> {order.status}
+                          </span>
+                          
+                          {order.status === 'pending' && (
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => handleUpdateOrderStatus(order.id, 'processed')}
+                                className="flex-1 bg-green-600 text-white p-1 flex justify-center hover:bg-green-700 transition-colors"
+                                title="Accept"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleUpdateOrderStatus(order.id, 'refused')}
+                                className="flex-1 bg-red-600 text-white p-1 flex justify-center hover:bg-red-700 transition-colors"
+                                title="Refuse"
+                              >
+                                <Ban size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {orders.length === 0 && (
+                <div className="py-20 text-center opacity-30 font-mono text-sm uppercase">NO ACTIVE LOGISTICS DATA</div>
+              )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Product Modal */}
+      {(isAddingProduct || editingProduct) && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-ink/90 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto p-12 relative"
+          >
+            <button 
+              onClick={() => { setIsAddingProduct(false); setEditingProduct(null); }}
+              className="absolute top-8 right-8 p-2 hover:bg-zinc-100 rounded-full"
+            >
+              <X size={24} />
+            </button>
+            
+            <h2 className="text-3xl font-black mb-8 uppercase">
+              {editingProduct ? 'EDIT SYSTEM RECORD' : 'NEW SYSTEM RECORD'}
+            </h2>
+            
+            <form onSubmit={handleSaveProduct} className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Name</label>
+                <input required name="name" defaultValue={editingProduct?.name} className="input-field" placeholder="GHOST HOODIE" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Brand</label>
+                <input required name="brand" defaultValue={editingProduct?.brand} className="input-field" placeholder="CARTHENA" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Style</label>
+                <select required name="style" defaultValue={editingProduct?.style} className="input-field">
+                  <option value="baggy">BAGGY</option>
+                  <option value="oversize">OVERSIZE</option>
+                  <option value="old money">OLD MONEY</option>
+                  <option value="streetwear">STREETWEAR</option>
+                  <option value="minimalist">MINIMALIST</option>
+                </select>
+              </div>
+              <div className="col-span-1">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Price (DZD)</label>
+                <input required type="number" name="price" defaultValue={editingProduct?.price} className="input-field" placeholder="0.00" />
+              </div>
+              <div className="col-span-1">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Stock</label>
+                <input required type="number" name="stock" defaultValue={editingProduct?.stock} className="input-field" placeholder="100" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image URL</label>
+                <input required name="imageUrl" defaultValue={editingProduct?.imageUrl} className="input-field" placeholder="https://..." />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Description</label>
+                <textarea required name="description" defaultValue={editingProduct?.description} className="input-field min-h-[100px]" />
+              </div>
+              <div className="md:col-span-2 flex flex-col md:flex-row items-start md:items-center gap-4 py-4 bg-zinc-50 px-6">
+                <div className="flex items-center gap-4">
+                  <input type="checkbox" id="isOnPromo" name="isOnPromo" defaultChecked={editingProduct?.isOnPromo} className="w-5 h-5 accent-ink" />
+                  <label htmlFor="isOnPromo" className="text-xs font-bold">ENABLE PROMOTIONAL PRICING</label>
+                </div>
+                <input type="number" name="discountedPrice" defaultValue={editingProduct?.discountedPrice} className="input-field w-full md:max-w-[150px] h-10 py-1" placeholder="Sale DZD" />
+              </div>
+
+              <div className="md:col-span-2 pt-6">
+                <button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className="btn-primary w-full text-lg disabled:opacity-50"
+                >
+                  {isSaving ? 'UPLOADING...' : 'UPLOAD DATA RECORD'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+      </div>
+    </div>
+  );
+}
