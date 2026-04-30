@@ -1,14 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Filter, X, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { Heart, X, SlidersHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { getProducts, Product, CATEGORIES } from '../services/store';
+import { getProducts, Product, CATEGORIES, getWishlistProductIds, toggleWishlistProduct } from '../services/store';
 
 export default function Shop() {
   const [products, setProducts] = useState<Product[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
 
   useEffect(() => {
     getProducts().then(allProducts => {
@@ -17,6 +18,7 @@ export default function Shop() {
     }).catch(err => {
       console.error("Shop: Error loading products", err);
     });
+    getWishlistProductIds().then(setWishlistIds).catch(console.error);
   }, []);
 
   const styles = CATEGORIES;
@@ -113,6 +115,18 @@ export default function Shop() {
                   alt={product.name} 
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    toggleWishlistProduct(product.id)
+                      .then(() => getWishlistProductIds().then(setWishlistIds))
+                      .catch(console.error);
+                  }}
+                  className="absolute top-4 right-4 z-10 bg-white/90 p-2 border border-zinc-200"
+                >
+                  <Heart size={14} className={wishlistIds.includes(product.id) ? 'fill-red-500 text-red-500' : ''} />
+                </button>
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-black tracking-widest opacity-30 uppercase">{product.brand}</span>

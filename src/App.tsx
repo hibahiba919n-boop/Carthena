@@ -5,7 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { ShoppingBag, ChevronRight, Menu, X, User, MessageSquare } from 'lucide-react';
+import { ShoppingBag, Menu, X, MessageSquare, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getProducts, Product } from './services/store';
 
@@ -15,6 +15,8 @@ import Shop from './pages/Shop';
 import Admin from './pages/Admin';
 import ProductDetail from './pages/ProductDetail';
 import Checkout from './pages/Checkout';
+import Cart from './pages/Cart';
+import TrackOrder from './pages/TrackOrder';
 import AIChatbot from './components/AIChatbot';
 
 const Navbar = () => {
@@ -24,6 +26,7 @@ const Navbar = () => {
   const links = [
     { name: 'HOME', path: '/' },
     { name: 'SHOP', path: '/shop' },
+    { name: 'TRACK', path: '/track' },
   ];
 
   return (
@@ -49,6 +52,12 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center space-x-6">
+          <Link to="/track" className="hover:opacity-60 transition-opacity">
+            <Heart size={20} />
+          </Link>
+          <Link to="/cart" className="hover:opacity-60 transition-opacity">
+            <ShoppingBag size={20} />
+          </Link>
           <Link to="/shop" className="hover:opacity-60 transition-opacity">
             <ShoppingBag size={20} />
           </Link>
@@ -107,7 +116,10 @@ function AppContent({ showAI, setShowAI }: { showAI: boolean, setShowAI: (v: boo
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="/product/:id" element={<ProductDetail />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout" element={<Checkout />} />
           <Route path="/checkout/:id" element={<Checkout />} />
+          <Route path="/track" element={<TrackOrder />} />
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </main>

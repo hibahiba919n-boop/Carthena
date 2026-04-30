@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from "./supabase";
+import { getOrCreateSessionId } from "./session";
 
 export interface Product {
   id: string;
@@ -11,6 +12,8 @@ export interface Product {
   imageUrl: string;
   stock: number;
   colorVariants?: ProductColorVariant[];
+  images?: string[];
+  variantStocks?: ProductVariantStock[];
   isOnPromo: boolean;
   discountedPrice?: number;
   createdAt: string;
@@ -19,6 +22,14 @@ export interface Product {
 export interface ProductColorVariant {
   color: string;
   availableSizes: string[];
+}
+
+export interface ProductVariantStock {
+  id: string;
+  productId: string;
+  color: string;
+  size: string;
+  stock: number;
 }
 
 export interface Order {
@@ -30,11 +41,43 @@ export interface Order {
   productId: string;
   productName: string;
   status: 'pending' | 'processed' | 'shipped' | 'delivered' | 'refused';
+  trackingToken?: string;
+  selectedSize?: string;
+  selectedColor?: string;
+  subtotal?: number;
+  shippingFee?: number;
+  promoCode?: string;
+  discountAmount?: number;
+  totalAmount?: number;
   createdAt: string;
 }
 
-const PRODUCTS_KEY = 'carthena_products';
-const ORDERS_KEY = 'carthena_orders';
+export interface CartItem {
+  id: string;
+  sessionId: string;
+  productId: string;
+  productName: string;
+  imageUrl: string;
+  unitPrice: number;
+  quantity: number;
+  selectedSize?: string;
+  selectedColor?: string;
+}
+
+export interface Review {
+  id: string;
+  productId: string;
+  customerName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
+export interface PromoValidation {
+  code: string;
+  type: "percentage" | "fixed";
+  value: number;
+}
 
 export const CATEGORIES = [
   'baggy', 'oversize', 'old money', 'streetwear', 'minimalist', 
@@ -47,49 +90,12 @@ export const CATEGORIES = [
 
 export const STANDARD_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
-// Initial Mock Data
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: '1',
-    name: 'Ghost Oversize Tee',
-    price: 45,
-    brand: 'CARTHENA',
-    style: 'oversize',
-    description: 'A heavyweight cotton tee with a dropped shoulder fit.',
-    imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&q=80&w=800',
-    stock: 25,
-    isOnPromo: false,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: '2',
-    name: 'Lunar Baggy Trousers',
-    price: 89,
-    brand: 'CARTHENA',
-    style: 'baggy',
-    description: 'Wide-leg silhouette with reinforced stitching.',
-    imageUrl: 'https://images.unsplash.com/photo-1551854838-212c20b7c8a1?auto=format&fit=crop&q=80&w=800',
-    stock: 15,
-    isOnPromo: true,
-    discountedPrice: 65,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: '3',
-    name: 'Heritage Knit Polo',
-    price: 75,
-    brand: 'ESSENTIALS',
-    style: 'old money',
-    description: 'Premium wool blend knit with a classic collar.',
-    imageUrl: 'https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&q=80&w=800',
-    stock: 10,
-    isOnPromo: false,
-    createdAt: new Date().toISOString()
+const requireSupabase = () => {
+  if (!supabase) {
+    throw new Error("Supabase non configuré. Configurez VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY.");
   }
-];
-
-// Helper to check if Supabase is active
-const isSupabaseActive = () => !!supabase;
+  return supabase;
+};
 
 const mapColorVariants = (value: any): ProductColorVariant[] | undefined => {
   if (!Array.isArray(value)) return undefined;
@@ -112,16 +118,14 @@ const mapColorVariants = (value: any): ProductColorVariant[] | undefined => {
 };
 
 export const uploadProductImage = async (file: File): Promise<string> => {
-  if (!isSupabaseActive()) {
-    throw new Error("Supabase n'est pas configuré. Impossible d'uploader l'image.");
-  }
+  const client = requireSupabase();
 
   const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
   const bucket = import.meta.env.VITE_SUPABASE_PRODUCT_IMAGES_BUCKET || 'product-images';
   const path = `products/${filename}`;
 
-  const { error: uploadError } = await supabase!.storage.from(bucket).upload(path, file, {
+  const { error: uploadError } = await client.storage.from(bucket).upload(path, file, {
     cacheControl: '3600',
     upsert: false
   });
@@ -130,7 +134,7 @@ export const uploadProductImage = async (file: File): Promise<string> => {
     throw new Error(`Upload image échoué: ${uploadError.message}`);
   }
 
-  const { data } = supabase!.storage.from(bucket).getPublicUrl(path);
+  const { data } = client.storage.from(bucket).getPublicUrl(path);
   if (!data?.publicUrl) {
     throw new Error("Impossible d'obtenir l'URL publique de l'image.");
   }
@@ -139,44 +143,58 @@ export const uploadProductImage = async (file: File): Promise<string> => {
 };
 
 export const getProducts = async (): Promise<Product[]> => {
-  if (isSupabaseActive()) {
-    const { data, error } = await supabase!
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Supabase Error fetching products:', error);
-    }
-    
-    if (!error && data) {
-      return data.map(p => ({
-        id: String(p.id),
-        name: p.name,
-        price: p.price,
-        brand: p.brand,
-        style: p.style,
-        description: p.description,
-        imageUrl: p.image_url,
-        stock: p.stock,
-        colorVariants: mapColorVariants(p.color_variants),
-        isOnPromo: p.is_on_promo,
-        discountedPrice: p.discounted_price,
-        createdAt: p.created_at
-      }));
-    }
-  }
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('products')
+    .select(`
+      *,
+      product_images(image_url, sort_order),
+      product_variants(id, color, size, stock)
+    `)
+    .order('created_at', { ascending: false });
 
-  const stored = localStorage.getItem(PRODUCTS_KEY);
-  if (!stored) {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(INITIAL_PRODUCTS));
-    return INITIAL_PRODUCTS;
-  }
-  return JSON.parse(stored);
+  if (error) throw error;
+
+  return (data || []).map((p: any) => {
+    const images = (p.product_images || [])
+      .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map((img: any) => img.image_url);
+    const variants: ProductVariantStock[] = (p.product_variants || []).map((v: any) => ({
+      id: String(v.id),
+      productId: String(p.id),
+      color: v.color,
+      size: v.size,
+      stock: v.stock
+    }));
+    const grouped = variants.reduce<Record<string, string[]>>((acc, item) => {
+      if (!acc[item.color]) acc[item.color] = [];
+      if (item.stock > 0) acc[item.color].push(item.size);
+      return acc;
+    }, {});
+    const colorVariants = Object.entries(grouped).map(([color, availableSizes]) => ({ color, availableSizes }));
+
+    return {
+      id: String(p.id),
+      name: p.name,
+      price: p.price,
+      brand: p.brand,
+      style: p.style,
+      description: p.description,
+      imageUrl: p.image_url,
+      images: images.length ? images : [p.image_url],
+      stock: p.stock,
+      variantStocks: variants,
+      colorVariants: colorVariants.length ? colorVariants : mapColorVariants(p.color_variants),
+      isOnPromo: p.is_on_promo,
+      discountedPrice: p.discounted_price,
+      createdAt: p.created_at
+    };
+  });
 };
 
 export const saveProduct = async (product: Product) => {
-  if (isSupabaseActive()) {
+  {
+    const client = requireSupabase();
     const payload = {
       name: product.name,
       price: product.price,
@@ -192,10 +210,10 @@ export const saveProduct = async (product: Product) => {
 
     let error: any;
     if (product.id && product.id.length > 15) { // UUID-like
-      const result = await supabase!.from('products').update(payload).eq('id', product.id);
+      const result = await client.from('products').update(payload).eq('id', product.id);
       error = result.error;
     } else {
-      const result = await supabase!.from('products').insert([payload]);
+      const result = await client.from('products').insert([payload]);
       error = result.error;
     }
 
@@ -204,8 +222,8 @@ export const saveProduct = async (product: Product) => {
       const fallbackPayload = { ...payload };
       delete (fallbackPayload as any).color_variants;
       const retryResult = product.id && product.id.length > 15
-        ? await supabase!.from('products').update(fallbackPayload).eq('id', product.id)
-        : await supabase!.from('products').insert([fallbackPayload]);
+        ? await client.from('products').update(fallbackPayload).eq('id', product.id)
+        : await client.from('products').insert([fallbackPayload]);
       error = retryResult.error;
     }
     
@@ -221,186 +239,280 @@ export const saveProduct = async (product: Product) => {
     }
     return;
   }
-
-  const products = await getProducts();
-  const index = products.findIndex(p => p.id === product.id);
-  if (index >= 0) {
-    products[index] = product;
-  } else {
-    products.push(product);
-  }
-  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
 };
 
 export const deleteProduct = async (id: string) => {
-  console.log(`Store: Attempting to delete product with ID: ${id}`);
-  
-  if (isSupabaseActive()) {
-    // Try both numeric and string versions
-    const isProbablyNumeric = !isNaN(Number(id)) && id.length < 15;
-    const targetId = isProbablyNumeric ? Number(id) : id;
-    
-    console.log(`Store: Supabase delete target ID:`, targetId, `(type: ${typeof targetId})`);
-
-    // D'abord, supprimer les commandes liées pour éviter l'erreur de contrainte de clé étrangère (Foreign Key Constraint)
-    console.log(`Store: Deleting related orders for product ${targetId}`);
-    const { error: orderError } = await supabase!
-      .from('orders')
-      .delete()
-      .eq('product_id', targetId);
-      
-    if (orderError) {
-      console.error('Store: Failed to delete related orders:', orderError);
-    }
-    
-    // Ensuite, supprimer le produit
-    const { error, count } = await supabase!
-      .from('products')
-      .delete({ count: 'exact' })
-      .eq('id', targetId);
-    
-    if (error) {
-      console.error('Store: Supabase Error deleting product:', error);
-      throw new Error(`Erreur base de données (Supabase): ${error.message} (Code: ${error.code})`);
-    }
-    
-    console.log(`Store: Supabase delete response count:`, count);
-    
-    // If we didn't delete anything, it might be due to ID mismatch or RLS
-    if (count === 0) {
-      console.warn("Store: No rows deleted from Supabase. Attempting fallback with string ID...");
-      await supabase!.from('orders').delete().eq('product_id', id); // Fallback for orders
-      const { error: errorString } = await supabase!
-        .from('products')
-        .delete()
-        .eq('id', id);
-      if (errorString) console.warn("Store: Fallback string delete also failed:", errorString);
-    }
-  }
-
-  // Backup cleanup in local storage
-  const stored = localStorage.getItem(PRODUCTS_KEY);
-  if (stored) {
-    try {
-      const products = JSON.parse(stored) as Product[];
-      const filtered = products.filter(p => String(p.id).trim() !== String(id).trim());
-      localStorage.setItem(PRODUCTS_KEY, JSON.stringify(filtered));
-      console.log('Store: Local storage cleaned up');
-    } catch (e) {
-      console.error('Store: Error cleaning up local storage:', e);
-    }
-  }
+  const client = requireSupabase();
+  const { error } = await client.from('products').delete().eq('id', id);
+  if (error) throw error;
 };
 
 export const getOrders = async (): Promise<Order[]> => {
-  if (isSupabaseActive()) {
-    try {
-      const { data, error } = await supabase!
-        .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      if (data) {
-        return data.map(o => ({
-          id: String(o.id),
-          customerLastName: o.customer_last_name,
-          customerFirstName: o.customer_first_name,
-          phone: o.phone,
-          wilaya: o.wilaya,
-          productId: String(o.product_id),
-          productName: o.product_name,
-          status: o.status,
-          createdAt: o.created_at
-        }));
-      }
-    } catch (error) {
-      console.error('Supabase Error fetching orders:', error);
-    }
-  }
-
-  const stored = localStorage.getItem(ORDERS_KEY);
-  return stored ? JSON.parse(stored) : [];
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((o: any) => ({
+    id: String(o.id),
+    customerLastName: o.customer_last_name,
+    customerFirstName: o.customer_first_name,
+    phone: o.phone,
+    wilaya: o.wilaya,
+    productId: String(o.product_id),
+    productName: o.product_name,
+    status: o.status,
+    trackingToken: o.tracking_token,
+    selectedSize: o.selected_size,
+    selectedColor: o.selected_color,
+    subtotal: o.subtotal,
+    shippingFee: o.shipping_fee,
+    promoCode: o.promo_code,
+    discountAmount: o.discount_amount,
+    totalAmount: o.total_amount,
+    createdAt: o.created_at
+  }));
 };
 
 export const saveOrder = async (order: Order) => {
-  if (isSupabaseActive()) {
-    const { error } = await supabase!.from('orders').insert([{
+  const client = requireSupabase();
+  const trackingToken = order.trackingToken || Math.random().toString(36).slice(2, 10).toUpperCase();
+  const { error } = await client.from('orders').insert([{
       customer_last_name: order.customerLastName,
       customer_first_name: order.customerFirstName,
       phone: order.phone,
       wilaya: order.wilaya,
       product_id: order.productId,
       product_name: order.productName,
-      status: order.status
+      status: order.status,
+      tracking_token: trackingToken,
+      selected_size: order.selectedSize || null,
+      selected_color: order.selectedColor || null,
+      subtotal: order.subtotal || null,
+      shipping_fee: order.shippingFee || null,
+      promo_code: order.promoCode || null,
+      discount_amount: order.discountAmount || null,
+      total_amount: order.totalAmount || null
     }]);
-    
-    if (error) {
-      console.error('Supabase Error saving order:', error);
-      throw error;
-    }
+  if (error) throw error;
+  return trackingToken;
+};
+
+export const decrementVariantStock = async (productId: string, color: string, size: string, quantity: number) => {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('product_variants')
+    .select('id, stock')
+    .eq('product_id', productId)
+    .eq('color', color)
+    .eq('size', size)
+    .single();
+  if (error) throw error;
+  const newStock = Math.max(0, (data.stock || 0) - quantity);
+  const { error: updateError } = await client.from('product_variants').update({ stock: newStock }).eq('id', data.id);
+  if (updateError) throw updateError;
+};
+
+export const getShippingFeeByWilaya = async (wilaya: string): Promise<number> => {
+  const client = requireSupabase();
+  const { data, error } = await client.from('shipping_rates').select('fee').eq('wilaya', wilaya).maybeSingle();
+  if (error) throw error;
+  return data?.fee ?? 600;
+};
+
+export const validatePromoCode = async (code: string): Promise<PromoValidation | null> => {
+  const client = requireSupabase();
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return null;
+  const { data, error } = await client
+    .from('promo_codes')
+    .select('code, discount_type, discount_value, is_active, starts_at, ends_at')
+    .eq('code', normalized)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || !data.is_active) return null;
+  const now = new Date();
+  if (data.starts_at && new Date(data.starts_at) > now) return null;
+  if (data.ends_at && new Date(data.ends_at) < now) return null;
+  return { code: data.code, type: data.discount_type, value: data.discount_value };
+};
+
+export const getOrCreateCart = async () => {
+  const client = requireSupabase();
+  const sessionId = getOrCreateSessionId();
+  const { data } = await client.from('carts').select('id').eq('session_id', sessionId).maybeSingle();
+  if (data?.id) return { cartId: String(data.id), sessionId };
+  const created = await client.from('carts').insert([{ session_id: sessionId }]).select('id').single();
+  if (created.error) throw created.error;
+  return { cartId: String(created.data.id), sessionId };
+};
+
+export const getCartItems = async (): Promise<CartItem[]> => {
+  const client = requireSupabase();
+  const { cartId, sessionId } = await getOrCreateCart();
+  const { data, error } = await client
+    .from('cart_items')
+    .select('id, product_id, quantity, selected_size, selected_color, unit_price, products(name, image_url)')
+    .eq('cart_id', cartId);
+  if (error) throw error;
+  return (data || []).map((item: any) => ({
+    id: String(item.id),
+    sessionId,
+    productId: String(item.product_id),
+    productName: item.products?.name || 'Product',
+    imageUrl: item.products?.image_url || '',
+    unitPrice: item.unit_price || 0,
+    quantity: item.quantity || 1,
+    selectedSize: item.selected_size || undefined,
+    selectedColor: item.selected_color || undefined
+  }));
+};
+
+export const addToCart = async (product: Product, quantity: number, selectedSize?: string, selectedColor?: string) => {
+  const client = requireSupabase();
+  const { cartId } = await getOrCreateCart();
+  const basePrice = product.isOnPromo ? (product.discountedPrice || product.price) : product.price;
+  const existing = await client
+    .from('cart_items')
+    .select('id, quantity')
+    .eq('cart_id', cartId)
+    .eq('product_id', product.id)
+    .eq('selected_size', selectedSize || null)
+    .eq('selected_color', selectedColor || null)
+    .maybeSingle();
+  if (existing.error && existing.error.code !== 'PGRST116') throw existing.error;
+  if (existing.data?.id) {
+    const { error } = await client.from('cart_items').update({ quantity: existing.data.quantity + quantity }).eq('id', existing.data.id);
+    if (error) throw error;
     return;
   }
+  const { error } = await client.from('cart_items').insert([{
+    cart_id: cartId,
+    product_id: product.id,
+    quantity,
+    selected_size: selectedSize || null,
+    selected_color: selectedColor || null,
+    unit_price: basePrice
+  }]);
+  if (error) throw error;
+};
 
-  const orders = await getOrders();
-  orders.push(order);
-  localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+export const updateCartItemQuantity = async (itemId: string, quantity: number) => {
+  const client = requireSupabase();
+  if (quantity <= 0) {
+    const { error } = await client.from('cart_items').delete().eq('id', itemId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await client.from('cart_items').update({ quantity }).eq('id', itemId);
+  if (error) throw error;
+};
+
+export const clearCart = async () => {
+  const client = requireSupabase();
+  const { cartId } = await getOrCreateCart();
+  const { error } = await client.from('cart_items').delete().eq('cart_id', cartId);
+  if (error) throw error;
+};
+
+export const getWishlistProductIds = async (): Promise<string[]> => {
+  const client = requireSupabase();
+  const sessionId = getOrCreateSessionId();
+  const { data, error } = await client.from('wishlists').select('product_id').eq('session_id', sessionId);
+  if (error) throw error;
+  return (data || []).map((row: any) => String(row.product_id));
+};
+
+export const toggleWishlistProduct = async (productId: string) => {
+  const client = requireSupabase();
+  const sessionId = getOrCreateSessionId();
+  const existing = await client
+    .from('wishlists')
+    .select('id')
+    .eq('session_id', sessionId)
+    .eq('product_id', productId)
+    .maybeSingle();
+  if (existing.error && existing.error.code !== 'PGRST116') throw existing.error;
+  if (existing.data?.id) {
+    const { error } = await client.from('wishlists').delete().eq('id', existing.data.id);
+    if (error) throw error;
+    return false;
+  }
+  const { error } = await client.from('wishlists').insert([{ session_id: sessionId, product_id: productId }]);
+  if (error) throw error;
+  return true;
+};
+
+export const getProductReviews = async (productId: string): Promise<Review[]> => {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('product_reviews')
+    .select('*')
+    .eq('product_id', productId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    id: String(row.id),
+    productId: String(row.product_id),
+    customerName: row.customer_name,
+    rating: row.rating,
+    comment: row.comment,
+    createdAt: row.created_at
+  }));
+};
+
+export const addProductReview = async (productId: string, customerName: string, rating: number, comment: string) => {
+  const client = requireSupabase();
+  const { error } = await client.from('product_reviews').insert([{
+    product_id: productId,
+    customer_name: customerName,
+    rating,
+    comment
+  }]);
+  if (error) throw error;
+};
+
+export const getOrderByTrackingToken = async (token: string): Promise<Order | null> => {
+  const client = requireSupabase();
+  const { data, error } = await client.from('orders').select('*').eq('tracking_token', token.trim().toUpperCase()).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: String(data.id),
+    customerLastName: data.customer_last_name,
+    customerFirstName: data.customer_first_name,
+    phone: data.phone,
+    wilaya: data.wilaya,
+    productId: String(data.product_id),
+    productName: data.product_name,
+    status: data.status,
+    trackingToken: data.tracking_token,
+    selectedSize: data.selected_size,
+    selectedColor: data.selected_color,
+    subtotal: data.subtotal,
+    shippingFee: data.shipping_fee,
+    promoCode: data.promo_code,
+    discountAmount: data.discount_amount,
+    totalAmount: data.total_amount,
+    createdAt: data.created_at
+  };
+};
+
+export const logAnalyticsEvent = async (eventName: string, payload: Record<string, any> = {}) => {
+  const client = requireSupabase();
+  const sessionId = getOrCreateSessionId();
+  await client.from('analytics_events').insert([{ event_name: eventName, payload, session_id: sessionId }]);
 };
 
 export const updateOrderStatus = async (orderId: string, status: string, productId?: string) => {
-  if (isSupabaseActive()) {
-    const targetId = (orderId.length < 10 && !isNaN(Number(orderId))) ? Number(orderId) : orderId;
-
-    const { error } = await supabase!
-      .from('orders')
-      .update({ status })
-      .eq('id', targetId);
-    
-    if (error) {
-      console.error('Supabase Error updating order status:', error);
-      if (error.code === '23514') {
-        throw new Error('Le statut "' + status + '" n\'est pas autorisé par votre base de données (Check Constraint).');
-      }
-      throw new Error(`Supabase error: ${error.message}. (Assurez-vous d'avoir exécuté le SQL des permissions UPDATE)`);
-    }
-
-    if (status === 'delivered' && productId) {
-      const prodId = (productId.length < 15 && !isNaN(Number(productId))) ? Number(productId) : productId;
-      const { data: product } = await supabase!
-        .from('products')
-        .select('stock')
-        .eq('id', prodId)
-        .single();
-        
-      if (product && typeof product.stock === 'number') {
-        const newStock = Math.max(0, product.stock - 1);
-        await supabase!
-          .from('products')
-          .update({ stock: newStock })
-          .eq('id', prodId);
-      }
-    }
-  }
-
-  const stored = localStorage.getItem(ORDERS_KEY);
-  if (stored) {
-    const orders = JSON.parse(stored) as Order[];
-    const index = orders.findIndex(o => String(o.id).trim() === String(orderId).trim());
-    if (index >= 0) {
-      (orders[index] as any).status = status;
-      localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-    }
-  }
-
+  const client = requireSupabase();
+  const { error } = await client.from('orders').update({ status }).eq('id', orderId);
+  if (error) throw error;
   if (status === 'delivered' && productId) {
-    const storedProd = localStorage.getItem(PRODUCTS_KEY);
-    if (storedProd) {
-      const products = JSON.parse(storedProd) as Product[];
-      const pIdx = products.findIndex(p => String(p.id) === String(productId));
-      if (pIdx >= 0) {
-         products[pIdx].stock = Math.max(0, products[pIdx].stock - 1);
-         localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
-      }
+    const { data: product } = await client.from('products').select('stock').eq('id', productId).single();
+    if (product?.stock !== undefined) {
+      await client.from('products').update({ stock: Math.max(0, product.stock - 1) }).eq('id', productId);
     }
   }
 };
