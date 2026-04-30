@@ -25,9 +25,11 @@ import {
   saveProduct, 
   deleteProduct, 
   updateOrderStatus,
+  uploadProductImage,
   Product, 
   Order,
-  CATEGORIES
+  CATEGORIES,
+  STANDARD_SIZES
 } from '../services/store';
 
 export default function Admin() {
@@ -49,6 +51,24 @@ export default function Admin() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [colorsInput, setColorsInput] = useState('');
+
+  useEffect(() => {
+    if (!editingProduct) {
+      setSelectedSizes([]);
+      setColorsInput('');
+      return;
+    }
+
+    const sizes = Array.from(
+      new Set((editingProduct.colorVariants || []).flatMap(variant => variant.availableSizes || []))
+    );
+    const colors = (editingProduct.colorVariants || []).map(variant => variant.color).join(', ');
+
+    setSelectedSizes(sizes);
+    setColorsInput(colors);
+  }, [editingProduct]);
 
   const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -56,16 +76,37 @@ export default function Admin() {
     try {
       const formData = new FormData(e.currentTarget);
       const id = editingProduct?.id || Math.random().toString(36).substr(2, 9);
+      const imageFile = formData.get('imageFile') as File | null;
+      const imageUrlField = ((formData.get('imageUrl') as string) || '').trim();
+
+      let finalImageUrl = imageUrlField || editingProduct?.imageUrl || '';
+      if (imageFile && imageFile.size > 0) {
+        finalImageUrl = await uploadProductImage(imageFile);
+      }
+
+      if (!finalImageUrl) {
+        throw new Error("Veuillez fournir une image (upload ou URL).");
+      }
+
+      const normalizedStyle = ((formData.get('style') as string) || '').trim().toLowerCase();
+      const colors = colorsInput
+        .split(',')
+        .map(c => c.trim())
+        .filter(Boolean);
+      const variants = colors.length
+        ? colors.map(color => ({ color, availableSizes: selectedSizes }))
+        : undefined;
       
       const newProduct: Product = {
         id,
         name: formData.get('name') as string,
         price: Number(formData.get('price')),
         brand: formData.get('brand') as string,
-        style: formData.get('style') as any,
+        style: normalizedStyle,
         description: formData.get('description') as string,
-        imageUrl: formData.get('imageUrl') as string,
+        imageUrl: finalImageUrl,
         stock: Number(formData.get('stock')),
+        colorVariants: variants,
         isOnPromo: formData.get('isOnPromo') === 'on',
         discountedPrice: Number(formData.get('discountedPrice')) || undefined,
         createdAt: editingProduct?.createdAt || new Date().toISOString()
@@ -75,11 +116,17 @@ export default function Admin() {
       await refreshData();
       setIsAddingProduct(false);
       setEditingProduct(null);
-    } catch (err) {
-      alert("Error saving product. Check console or Supabase RLS.");
+    } catch (err: any) {
+      alert(err?.message || "Error saving product. Check console or Supabase RLS.");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const toggleSize = (size: string) => {
+    setSelectedSizes(prev =>
+      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
+    );
   };
 
   const handleDelete = async (id: string) => {
@@ -490,11 +537,12 @@ export default function Admin() {
               </div>
               <div className="col-span-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Style</label>
-                <select required name="style" defaultValue={editingProduct?.style} className="input-field">
+                <input required name="style" list="style-suggestions" defaultValue={editingProduct?.style} className="input-field" placeholder="old money, baggy, ..." />
+                <datalist id="style-suggestions">
                   {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat.toUpperCase()}</option>
+                    <option key={cat} value={cat} />
                   ))}
-                </select>
+                </datalist>
               </div>
               <div className="col-span-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Price (DZD)</label>
@@ -505,8 +553,41 @@ export default function Admin() {
                 <input required type="number" name="stock" defaultValue={editingProduct?.stock} className="input-field" placeholder="100" />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image URL</label>
-                <input required name="imageUrl" defaultValue={editingProduct?.imageUrl} className="input-field" placeholder="https://..." />
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image Upload</label>
+                <input name="imageFile" type="file" accept="image/*" className="input-field file:mr-4 file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:font-bold" />
+                <p className="text-[11px] text-zinc-500 mt-2">Upload prioritaire. Si vide, l'URL ci-dessous sera utilisée.</p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image URL (fallback)</label>
+                <input name="imageUrl" defaultValue={editingProduct?.imageUrl} className="input-field" placeholder="https://..." />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Couleurs (séparées par virgule)</label>
+                <input
+                  value={colorsInput}
+                  onChange={(e) => setColorsInput(e.target.value)}
+                  className="input-field"
+                  placeholder="Noir, Blanc, Marron"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Tailles disponibles</label>
+                <div className="flex flex-wrap gap-2">
+                  {STANDARD_SIZES.map(size => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => toggleSize(size)}
+                      className={`px-4 py-2 border text-xs font-black tracking-widest ${
+                        selectedSizes.includes(size)
+                          ? 'bg-ink text-beige border-ink'
+                          : 'bg-white text-zinc-500 border-zinc-200'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Description</label>

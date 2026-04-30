@@ -8,6 +8,7 @@ export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
   useEffect(() => {
     getProducts().then(products => {
@@ -16,7 +17,19 @@ export default function ProductDetail() {
     });
   }, [id]);
 
+  useEffect(() => {
+    if (product?.colorVariants?.length) {
+      setSelectedColor(product.colorVariants[0].color);
+    } else {
+      setSelectedColor(null);
+    }
+  }, [product]);
+
   if (!product) return <div className="py-40 text-center font-mono opacity-50">DATA RECORD NOT FOUND</div>;
+
+  const displayedSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+  const activeVariant = product.colorVariants?.find(v => v.color === selectedColor) || product.colorVariants?.[0];
+  const availableSizes = activeVariant?.availableSizes || [];
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-12 md:py-20">
@@ -59,6 +72,51 @@ export default function ProductDetail() {
               {product.description}
             </p>
           </div>
+
+          {!!product.colorVariants?.length && (
+            <div className="mb-10">
+              <p className="text-[10px] font-black tracking-widest opacity-40 uppercase mb-3">Couleur</p>
+              <div className="flex flex-wrap gap-3">
+                {product.colorVariants.map(variant => (
+                  <button
+                    key={variant.color}
+                    type="button"
+                    onClick={() => setSelectedColor(variant.color)}
+                    className={`px-4 py-2 border text-xs font-bold uppercase tracking-widest ${
+                      (selectedColor || activeVariant?.color) === variant.color
+                        ? 'bg-ink text-beige border-ink'
+                        : 'bg-white border-zinc-200 text-zinc-600'
+                    }`}
+                  >
+                    {variant.color}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!!availableSizes.length && (
+            <div className="mb-12">
+              <p className="text-[10px] font-black tracking-widest opacity-40 uppercase mb-3">Tailles</p>
+              <div className="flex flex-wrap gap-3">
+                {displayedSizes.map(size => {
+                  const isAvailable = availableSizes.includes(size);
+                  return (
+                    <span
+                      key={size}
+                      className={`px-4 py-2 border text-xs font-bold uppercase tracking-widest ${
+                        isAvailable
+                          ? 'bg-white border-zinc-300 text-zinc-800'
+                          : 'bg-zinc-100 border-zinc-200 text-zinc-400 line-through'
+                      }`}
+                    >
+                      {size}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-col gap-4 mb-12">
              <div className="bg-zinc-50 p-6 flex flex-col gap-4 border border-zinc-100">

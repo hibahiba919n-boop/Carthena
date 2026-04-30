@@ -10,9 +10,15 @@ export interface Product {
   description: string;
   imageUrl: string;
   stock: number;
+  colorVariants?: ProductColorVariant[];
   isOnPromo: boolean;
   discountedPrice?: number;
   createdAt: string;
+}
+
+export interface ProductColorVariant {
+  color: string;
+  availableSizes: string[];
 }
 
 export interface Order {
@@ -38,6 +44,8 @@ export const CATEGORIES = [
   'vintage', 'y2k', 'gothique', 'techwear', 'luxe', 
   'robes', 'jupes', 'maillots', 'loungewear', 'cargos', 'denim'
 ];
+
+export const STANDARD_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
 // Initial Mock Data
 const INITIAL_PRODUCTS: Product[] = [
@@ -83,6 +91,53 @@ const INITIAL_PRODUCTS: Product[] = [
 // Helper to check if Supabase is active
 const isSupabaseActive = () => !!supabase;
 
+const mapColorVariants = (value: any): ProductColorVariant[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+
+  const normalized = value
+    .map((item) => {
+      const color = typeof item?.color === 'string' ? item.color.trim() : '';
+      const availableSizes = Array.isArray(item?.availableSizes)
+        ? item.availableSizes
+            .filter((size: unknown) => typeof size === 'string' && size.trim().length > 0)
+            .map((size: string) => size.trim().toUpperCase())
+        : [];
+
+      if (!color) return null;
+      return { color, availableSizes };
+    })
+    .filter(Boolean) as ProductColorVariant[];
+
+  return normalized.length ? normalized : undefined;
+};
+
+export const uploadProductImage = async (file: File): Promise<string> => {
+  if (!isSupabaseActive()) {
+    throw new Error("Supabase n'est pas configuré. Impossible d'uploader l'image.");
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
+  const bucket = import.meta.env.VITE_SUPABASE_PRODUCT_IMAGES_BUCKET || 'product-images';
+  const path = `products/${filename}`;
+
+  const { error: uploadError } = await supabase!.storage.from(bucket).upload(path, file, {
+    cacheControl: '3600',
+    upsert: false
+  });
+
+  if (uploadError) {
+    throw new Error(`Upload image échoué: ${uploadError.message}`);
+  }
+
+  const { data } = supabase!.storage.from(bucket).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    throw new Error("Impossible d'obtenir l'URL publique de l'image.");
+  }
+
+  return data.publicUrl;
+};
+
 export const getProducts = async (): Promise<Product[]> => {
   if (isSupabaseActive()) {
     const { data, error } = await supabase!
@@ -104,6 +159,7 @@ export const getProducts = async (): Promise<Product[]> => {
         description: p.description,
         imageUrl: p.image_url,
         stock: p.stock,
+        colorVariants: mapColorVariants(p.color_variants),
         isOnPromo: p.is_on_promo,
         discountedPrice: p.discounted_price,
         createdAt: p.created_at
@@ -129,11 +185,12 @@ export const saveProduct = async (product: Product) => {
       description: product.description,
       image_url: product.imageUrl,
       stock: product.stock,
+      color_variants: product.colorVariants || null,
       is_on_promo: product.isOnPromo,
       discounted_price: product.discountedPrice
     };
 
-    let error;
+    let error: any;
     if (product.id && product.id.length > 15) { // UUID-like
       const result = await supabase!.from('products').update(payload).eq('id', product.id);
       error = result.error;
@@ -141,9 +198,25 @@ export const saveProduct = async (product: Product) => {
       const result = await supabase!.from('products').insert([payload]);
       error = result.error;
     }
+
+    // DB sans colonne color_variants -> retry sans ce champ
+    if (error?.code === 'PGRST204' || error?.code === '42703') {
+      const fallbackPayload = { ...payload };
+      delete (fallbackPayload as any).color_variants;
+      const retryResult = product.id && product.id.length > 15
+        ? await supabase!.from('products').update(fallbackPayload).eq('id', product.id)
+        : await supabase!.from('products').insert([fallbackPayload]);
+      error = retryResult.error;
+    }
     
     if (error) {
       console.error('Supabase Error saving product:', error);
+      if (error.code === '23514') {
+        throw new Error(
+          `La valeur du style "${product.style}" est bloquée par une contrainte de votre table products (check/enum). ` +
+          `Ajoutez ce style dans Supabase, ou remplacez la contrainte actuelle.`
+        );
+      }
       throw error;
     }
     return;
