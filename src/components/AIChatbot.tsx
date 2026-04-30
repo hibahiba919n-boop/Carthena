@@ -105,10 +105,10 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
                     "Je cherche un look casual pour le week-end" / "Suggère-moi un costume élégant"
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {['STREETWEAR', 'OLD MONEY', 'CASUAL', 'COSTUMES', 'SURVETEMENTS'].map(t => (
+                    {['STREETWEAR', 'OLD MONEY', 'CASUAL', 'COSTUMES', 'SURVETEMENTS', 'BAGGY', 'OVERSIZE', 'TECHWEAR', 'VINTAGE', 'LUXE'].map(t => (
                       <button 
                         key={t}
-                        onClick={() => setInput(t)}
+                        onClick={() => setInput(`Je veux un look ${t.toLowerCase()} pour une sortie.`)}
                         className="px-4 py-2 bg-white border border-zinc-200 text-[10px] font-black tracking-widest hover:border-ink transition-colors"
                       >
                         {t}

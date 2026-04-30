@@ -413,13 +413,47 @@ export interface AIResponse {
   productIds: string[];
 }
 
+const extractJsonObject = (raw: string): string => {
+  const fencedMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) return fencedMatch[1].trim();
+
+  const firstBrace = raw.indexOf('{');
+  const lastBrace = raw.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return raw.slice(firstBrace, lastBrace + 1);
+  }
+  return raw;
+};
+
+const buildFallbackAIResponse = (userMessage: string, products: Product[]): AIResponse => {
+  const normalized = userMessage.toLowerCase();
+  const matchedStyle = CATEGORIES.find(style => normalized.includes(style));
+  const catalog = matchedStyle
+    ? products.filter(p => (p.style || '').toLowerCase() === matchedStyle)
+    : products;
+  const picks = catalog.slice(0, 3).map(p => p.id);
+
+  const styleLabel = matchedStyle || 'casual chic';
+  return {
+    analysis: "Réponse de secours locale (sans IA externe).",
+    recommendation: `Très bon choix. Pour votre demande "${userMessage}", je vous conseille une base ${styleLabel} avec une coupe propre et des couleurs neutres. Si vous le souhaitez, je peux affiner selon votre budget, morphologie, et occasion.`,
+    outfitSuggestion: `Haut structuré + bas ${styleLabel} + sneakers propres + accessoire discret pour équilibrer la silhouette.`,
+    styleTip: "Privilégiez 2 couleurs dominantes maximum pour garder un look premium et cohérent.",
+    productIds: picks
+  };
+};
+
 export const getAIStylistRecommendation = async (
   userMessage: string,
   history: { role: 'user' | 'model', text: string }[]
 ): Promise<AIResponse> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  
   const products = await getProducts();
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return buildFallbackAIResponse(userMessage, products);
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
 
   const systemInstructions = `
     Tu es "Hamza", le conseiller en image IA exclusif et prestigieux de la Maison CARTHENA. 
@@ -430,9 +464,11 @@ export const getAIStylistRecommendation = async (
     2. SOUPLESSE ET DIALOGUE : 
        - Si le client dit juste "bonjour", réponds chaleureusement en te présentant (Hamza) et demande comment tu peux l'aider, SANS forcer de vêtements.
        - Si le client pose une question de style générale (ex: "comment s'habiller pour un date"), donne des conseils experts en couleurs, matières, et coupes.
-    3. HORS-SUJET : Si la question n'a absolument aucun rapport avec la mode ou le lifestyle, réponds avec un trait d'esprit ou d'humour élégant, puis ramène la conversation sur le style vestimentaire.
+    3. HORS-SUJET : Si la question n'a absolument aucun rapport avec la mode ou le lifestyle, réponds brièvement avec humour, puis ramène la conversation sur le style vestimentaire.
     4. RECOMMANDATIONS PRODUITS : Ne propose des articles de la boutique QUE si c'est pertinent par rapport à la demande. Laisse la liste "productIds" vide si ce n'est pas le moment de vendre.
     5. LE "STYLE TIP" : Ajoute toujours une petite astuce mode secrète ou un conseil de styliste en bonus ("styleTip").
+    6. STYLES DISPONIBLES : baggy, oversize, old money, streetwear, minimalist, jeans, survetements, polo, chemises, costumes, sportswear, casual, sneakers, accessoires, vestes, manteaux, t-shirts, pulls, shorts, pantalons, vintage, y2k, gothique, techwear, luxe, robes, jupes, maillots, loungewear, cargos, denim.
+    7. ADAPTATION : La réponse doit toujours suivre exactement l'intention du client (occasion, style, budget, météo, etc.), et ne jamais répéter un message d'erreur générique.
 
     Voici le catalogue actuel de la boutique CARTHENA (en DZD) :
     ${JSON.stringify(products, null, 2)}
@@ -452,18 +488,32 @@ export const getAIStylistRecommendation = async (
     parts: [{ text: h.text }]
   }));
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [
-      { role: 'user', parts: [{ text: systemInstructions }] },
-      ...chatHistory,
-      { role: 'user', parts: [{ text: userMessage }] }
-    ],
-    config: {
-      responseMimeType: "application/json"
-    }
-  });
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        { role: 'user', parts: [{ text: systemInstructions }] },
+        ...chatHistory,
+        { role: 'user', parts: [{ text: userMessage }] }
+      ],
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
 
-  const text = response.text || "{}";
-  return JSON.parse(text) as AIResponse;
+    const rawText = response.text || "{}";
+    const jsonText = extractJsonObject(rawText);
+    const parsed = JSON.parse(jsonText) as Partial<AIResponse>;
+
+    return {
+      analysis: parsed.analysis,
+      recommendation: parsed.recommendation || "Je vous propose un look net et moderne. Donnez-moi l'occasion exacte pour une recommandation ultra-précise.",
+      outfitSuggestion: parsed.outfitSuggestion,
+      styleTip: parsed.styleTip || "Un contraste léger entre le haut et le bas structure mieux la silhouette.",
+      productIds: Array.isArray(parsed.productIds) ? parsed.productIds.map(String) : []
+    };
+  } catch (error) {
+    console.error("AI fallback used:", error);
+    return buildFallbackAIResponse(userMessage, products);
+  }
 };
