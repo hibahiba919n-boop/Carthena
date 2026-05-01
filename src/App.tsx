@@ -14,6 +14,7 @@ const Admin = lazy(() => import('./pages/Admin'));
 const ProductDetail = lazy(() => import('./pages/ProductDetail'));
 const Checkout = lazy(() => import('./pages/Checkout'));
 const Cart = lazy(() => import('./pages/Cart'));
+const Wishlist = lazy(() => import('./pages/Wishlist'));
 const TrackOrder = lazy(() => import('./pages/TrackOrder'));
 const AIChatbot = lazy(() => import('./components/AIChatbot'));
 
@@ -24,6 +25,7 @@ const Navbar = () => {
   const links = [
     { name: 'HOME', path: '/' },
     { name: 'SHOP', path: '/shop' },
+    { name: 'WISHLIST', path: '/wishlist' },
     { name: 'TRACK', path: '/track' },
   ];
 
@@ -50,7 +52,7 @@ const Navbar = () => {
         </div>
 
         <div className="flex items-center space-x-3 sm:space-x-6">
-          <Link to="/track" className="hover:opacity-60 transition-opacity">
+          <Link to="/wishlist" className="hover:opacity-60 transition-opacity">
             <Heart size={20} />
           </Link>
           <Link to="/cart" className="hover:opacity-60 transition-opacity">
@@ -116,6 +118,7 @@ function AppContent({ showAI, setShowAI }: { showAI: boolean, setShowAI: (v: boo
             <Route path="/shop" element={<Shop />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/cart" element={<Cart />} />
+            <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/checkout/:id" element={<Checkout />} />
             <Route path="/track" element={<TrackOrder />} />

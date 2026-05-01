@@ -27,11 +27,12 @@ export default function ProductDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (product?.colorVariants?.length) {
-      setSelectedColor(product.colorVariants[0].color);
-    } else {
-      setSelectedColor(null);
-    }
+    if (!product) return;
+    const firstColor =
+      product.colorVariants?.[0]?.color ||
+      product.colorImages?.[0]?.color ||
+      null;
+    setSelectedColor(firstColor);
   }, [product]);
 
   useEffect(() => {
@@ -64,11 +65,21 @@ export default function ProductDetail() {
   if (!product) return <div className="py-40 text-center font-mono opacity-50">DATA RECORD NOT FOUND</div>;
 
   const displayedSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
-  const activeVariant = product.colorVariants?.find(v => v.color === selectedColor) || product.colorVariants?.[0];
+  const colorOptions = Array.from(
+    new Set([
+      ...(product.colorVariants || []).map((v) => v.color),
+      ...(product.colorImages || []).map((img) => img.color)
+    ].filter(Boolean))
+  );
+  const activeVariant = product.colorVariants?.find(v => v.color === selectedColor) || product.colorVariants?.find(v => v.color === colorOptions[0]);
   const availableSizes = activeVariant?.availableSizes || [];
   const currentImage = activeImage || product.images?.[0] || product.imageUrl;
 
   const handleAddToCart = async () => {
+    if (colorOptions.length && !selectedColor) {
+      alert("Choisissez une couleur.");
+      return;
+    }
     if (availableSizes.length && !selectedSize) {
       alert("Choisissez une taille.");
       return;
@@ -139,22 +150,22 @@ export default function ProductDetail() {
             </div>
           )}
 
-          {!!product.colorVariants?.length && (
+          {!!colorOptions.length && (
             <div className="mb-10">
               <p className="text-[10px] font-black tracking-widest opacity-40 uppercase mb-3">Couleur</p>
               <div className="flex flex-wrap gap-3">
-                {product.colorVariants.map(variant => (
+                {colorOptions.map((color) => (
                   <button
-                    key={variant.color}
+                    key={color}
                     type="button"
-                    onClick={() => setSelectedColor(variant.color)}
+                    onClick={() => setSelectedColor(color)}
                     className={`px-4 py-2 border text-xs font-bold uppercase tracking-widest ${
-                      (selectedColor || activeVariant?.color) === variant.color
+                      (selectedColor || activeVariant?.color) === color
                         ? 'bg-ink text-beige border-ink'
                         : 'bg-white border-zinc-200 text-zinc-600'
                     }`}
                   >
-                    {variant.color}
+                    {color}
                   </button>
                 ))}
               </div>
