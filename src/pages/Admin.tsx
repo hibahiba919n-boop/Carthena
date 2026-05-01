@@ -58,19 +58,16 @@ export default function Admin() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [colorRows, setColorRows] = useState<ColorRow[]>([{ id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
+  const [variantStockMap, setVariantStockMap] = useState<Record<string, Record<string, number>>>({});
 
   useEffect(() => {
     if (!editingProduct) {
-      setSelectedSizes([]);
       setColorRows([{ id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
+      setVariantStockMap({});
       return;
     }
 
-    const sizes = Array.from(
-      new Set((editingProduct.colorVariants || []).flatMap(variant => variant.availableSizes || []))
-    );
     const imageMap = new Map((editingProduct.colorImages || []).map(i => [i.color.toLowerCase(), i.imageUrl]));
     const colors = Array.from(new Set((editingProduct.colorVariants || []).map(variant => variant.color)));
     const rows: ColorRow[] = (colors.length ? colors : ['']).map(color => ({
@@ -79,9 +76,15 @@ export default function Admin() {
       imageUrl: imageMap.get(color.toLowerCase()) || editingProduct.imageUrl || '',
       imageFile: null
     }));
+    const stockMap: Record<string, Record<string, number>> = {};
+    (editingProduct.variantStocks || []).forEach((item) => {
+      const colorKey = item.color.toLowerCase();
+      if (!stockMap[colorKey]) stockMap[colorKey] = {};
+      stockMap[colorKey][item.size.toUpperCase()] = item.stock || 0;
+    });
 
-    setSelectedSizes(sizes);
     setColorRows(rows);
+    setVariantStockMap(stockMap);
   }, [editingProduct]);
 
   const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -112,8 +115,27 @@ export default function Admin() {
 
       const normalizedStyle = ((formData.get('style') as string) || '').trim().toLowerCase();
       const variants = validColorRows.length
-        ? validColorRows.map(({ color }) => ({ color, availableSizes: selectedSizes }))
+        ? validColorRows.map(({ color }) => {
+            const colorKey = color.toLowerCase();
+            const sizeMap = variantStockMap[colorKey] || {};
+            const availableSizes = STANDARD_SIZES.filter((size) => (sizeMap[size] || 0) > 0);
+            return { color, availableSizes };
+          })
         : undefined;
+      const variantStocks = validColorRows.flatMap(({ color }) => {
+        const colorKey = color.toLowerCase();
+        const sizeMap = variantStockMap[colorKey] || {};
+        return STANDARD_SIZES
+          .filter((size) => (sizeMap[size] || 0) > 0)
+          .map((size) => ({
+            id: '',
+            productId: id,
+            color,
+            size,
+            stock: sizeMap[size] || 0
+          }));
+      });
+      const totalStock = variantStocks.reduce((sum, item) => sum + item.stock, 0);
       
       const newProduct: Product = {
         id,
@@ -123,9 +145,10 @@ export default function Admin() {
         style: normalizedStyle,
         description: formData.get('description') as string,
         imageUrl: finalImageUrl,
-        stock: Number(formData.get('stock')),
+        stock: totalStock,
         colorVariants: variants,
         colorImages: validColorRows,
+        variantStocks,
         isOnPromo: formData.get('isOnPromo') === 'on',
         discountedPrice: Number(formData.get('discountedPrice')) || undefined,
         createdAt: editingProduct?.createdAt || new Date().toISOString()
@@ -142,22 +165,56 @@ export default function Admin() {
     }
   };
 
-  const toggleSize = (size: string) => {
-    setSelectedSizes(prev =>
-      prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
-    );
-  };
-
   const addColorRow = () => {
     setColorRows(prev => [...prev, { id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
   };
 
   const removeColorRow = (id: string) => {
-    setColorRows(prev => (prev.length === 1 ? prev : prev.filter(row => row.id !== id)));
+    setColorRows(prev => {
+      if (prev.length === 1) return prev;
+      const target = prev.find((row) => row.id === id);
+      if (target?.color) {
+        setVariantStockMap((old) => {
+          const copy = { ...old };
+          delete copy[target.color.toLowerCase()];
+          return copy;
+        });
+      }
+      return prev.filter(row => row.id !== id);
+    });
   };
 
   const updateColorRow = (id: string, patch: Partial<ColorRow>) => {
-    setColorRows(prev => prev.map(row => (row.id === id ? { ...row, ...patch } : row)));
+    setColorRows(prev => prev.map(row => {
+      if (row.id !== id) return row;
+      if (patch.color !== undefined) {
+        const oldKey = row.color.toLowerCase();
+        const newKey = patch.color.toLowerCase();
+        if (oldKey !== newKey) {
+          setVariantStockMap((old) => {
+            const copy = { ...old };
+            if (old[oldKey] && !old[newKey]) {
+              copy[newKey] = old[oldKey];
+            }
+            if (oldKey) delete copy[oldKey];
+            return copy;
+          });
+        }
+      }
+      return { ...row, ...patch };
+    }));
+  };
+
+  const setVariantQty = (color: string, size: string, raw: string) => {
+    const colorKey = color.toLowerCase();
+    const value = Math.max(0, Number(raw || 0));
+    setVariantStockMap((prev) => ({
+      ...prev,
+      [colorKey]: {
+        ...(prev[colorKey] || {}),
+        [size]: Number.isFinite(value) ? value : 0
+      }
+    }));
   };
 
   const handleDelete = async (id: string) => {
@@ -581,7 +638,7 @@ export default function Admin() {
               </div>
               <div className="col-span-1">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Stock</label>
-                <input required type="number" name="stock" defaultValue={editingProduct?.stock} className="input-field" placeholder="100" />
+                <input readOnly type="number" name="stock" value={Object.values(variantStockMap).reduce((sum, sizeMap) => sum + Object.values(sizeMap).reduce((s, v) => s + (Number(v) || 0), 0), 0)} className="input-field bg-zinc-50" placeholder="Auto" />
               </div>
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between mb-2">
@@ -623,22 +680,30 @@ export default function Admin() {
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Tailles disponibles</label>
-                <div className="flex flex-wrap gap-2">
-                  {STANDARD_SIZES.map(size => (
-                    <button
-                      key={size}
-                      type="button"
-                      onClick={() => toggleSize(size)}
-                      className={`px-4 py-2 border text-xs font-black tracking-widest ${
-                        selectedSizes.includes(size)
-                          ? 'bg-ink text-beige border-ink'
-                          : 'bg-white text-zinc-500 border-zinc-200'
-                      }`}
-                    >
-                      {size}
-                    </button>
-                  ))}
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Stock par couleur et taille</label>
+                <div className="space-y-3">
+                  {colorRows.filter((row) => row.color.trim()).map((row) => {
+                    const colorKey = row.color.toLowerCase();
+                    return (
+                      <div key={row.id} className="border border-zinc-200 p-3">
+                        <p className="text-xs font-black uppercase mb-3">{row.color}</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+                          {STANDARD_SIZES.map((size) => (
+                            <div key={`${row.id}-${size}`}>
+                              <label className="text-[10px] opacity-50 block mb-1">{size}</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={variantStockMap[colorKey]?.[size] ?? 0}
+                                onChange={(e) => setVariantQty(row.color, size, e.target.value)}
+                                className="input-field h-10 py-1"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="md:col-span-2">

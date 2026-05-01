@@ -263,6 +263,21 @@ export const saveProduct = async (product: Product) => {
       throw new Error("Produit enregistré mais ID introuvable pour enregistrer les images.");
     }
 
+    // Replace variant rows with current admin matrix (color x size quantities).
+    await client.from('product_variants').delete().eq('product_id', savedProductId);
+    const variantRows = (product.variantStocks || [])
+      .filter((item) => (item.stock || 0) > 0)
+      .map((item) => ({
+        product_id: savedProductId,
+        color: item.color,
+        size: item.size,
+        stock: item.stock
+      }));
+    if (variantRows.length > 0) {
+      const { error: variantsError } = await client.from('product_variants').insert(variantRows);
+      if (variantsError) throw variantsError;
+    }
+
     // Replace product images to keep color -> image mapping consistent.
     await client.from('product_images').delete().eq('product_id', savedProductId);
     const rows = (product.colorImages || []).map((item, index) => ({
