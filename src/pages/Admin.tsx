@@ -32,6 +32,13 @@ import {
   STANDARD_SIZES
 } from '../services/store';
 
+interface ColorRow {
+  id: string;
+  color: string;
+  imageUrl: string;
+  imageFile: File | null;
+}
+
 export default function Admin() {
   const [activeTab, setActiveTab] = useState<'stats' | 'products' | 'orders'>('stats');
   const [products, setProducts] = useState<Product[]>([]);
@@ -52,22 +59,29 @@ export default function Admin() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
-  const [colorsInput, setColorsInput] = useState('');
+  const [colorRows, setColorRows] = useState<ColorRow[]>([{ id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
 
   useEffect(() => {
     if (!editingProduct) {
       setSelectedSizes([]);
-      setColorsInput('');
+      setColorRows([{ id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
       return;
     }
 
     const sizes = Array.from(
       new Set((editingProduct.colorVariants || []).flatMap(variant => variant.availableSizes || []))
     );
-    const colors = (editingProduct.colorVariants || []).map(variant => variant.color).join(', ');
+    const imageMap = new Map((editingProduct.colorImages || []).map(i => [i.color.toLowerCase(), i.imageUrl]));
+    const colors = Array.from(new Set((editingProduct.colorVariants || []).map(variant => variant.color)));
+    const rows: ColorRow[] = (colors.length ? colors : ['']).map(color => ({
+      id: crypto.randomUUID(),
+      color,
+      imageUrl: imageMap.get(color.toLowerCase()) || editingProduct.imageUrl || '',
+      imageFile: null
+    }));
 
     setSelectedSizes(sizes);
-    setColorsInput(colors);
+    setColorRows(rows);
   }, [editingProduct]);
 
   const handleSaveProduct = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -76,25 +90,29 @@ export default function Admin() {
     try {
       const formData = new FormData(e.currentTarget);
       const id = editingProduct?.id || Math.random().toString(36).substr(2, 9);
-      const imageFile = formData.get('imageFile') as File | null;
-      const imageUrlField = ((formData.get('imageUrl') as string) || '').trim();
-
-      let finalImageUrl = imageUrlField || editingProduct?.imageUrl || '';
-      if (imageFile && imageFile.size > 0) {
-        finalImageUrl = await uploadProductImage(imageFile);
+      const uploadedRows = await Promise.all(
+        colorRows.map(async (row) => {
+          const color = row.color.trim();
+          if (!color) return null;
+          let imageUrl = row.imageUrl.trim();
+          if (row.imageFile && row.imageFile.size > 0) {
+            imageUrl = await uploadProductImage(row.imageFile);
+          }
+          if (!imageUrl) {
+            throw new Error(`Veuillez ajouter une image pour la couleur "${color}".`);
+          }
+          return { color, imageUrl };
+        })
+      );
+      const validColorRows = uploadedRows.filter(Boolean) as { color: string; imageUrl: string }[];
+      if (!validColorRows.length) {
+        throw new Error("Ajoutez au moins une couleur avec image.");
       }
-
-      if (!finalImageUrl) {
-        throw new Error("Veuillez fournir une image (upload ou URL).");
-      }
+      const finalImageUrl = validColorRows[0].imageUrl;
 
       const normalizedStyle = ((formData.get('style') as string) || '').trim().toLowerCase();
-      const colors = colorsInput
-        .split(',')
-        .map(c => c.trim())
-        .filter(Boolean);
-      const variants = colors.length
-        ? colors.map(color => ({ color, availableSizes: selectedSizes }))
+      const variants = validColorRows.length
+        ? validColorRows.map(({ color }) => ({ color, availableSizes: selectedSizes }))
         : undefined;
       
       const newProduct: Product = {
@@ -107,6 +125,7 @@ export default function Admin() {
         imageUrl: finalImageUrl,
         stock: Number(formData.get('stock')),
         colorVariants: variants,
+        colorImages: validColorRows,
         isOnPromo: formData.get('isOnPromo') === 'on',
         discountedPrice: Number(formData.get('discountedPrice')) || undefined,
         createdAt: editingProduct?.createdAt || new Date().toISOString()
@@ -127,6 +146,18 @@ export default function Admin() {
     setSelectedSizes(prev =>
       prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]
     );
+  };
+
+  const addColorRow = () => {
+    setColorRows(prev => [...prev, { id: crypto.randomUUID(), color: '', imageUrl: '', imageFile: null }]);
+  };
+
+  const removeColorRow = (id: string) => {
+    setColorRows(prev => (prev.length === 1 ? prev : prev.filter(row => row.id !== id)));
+  };
+
+  const updateColorRow = (id: string, patch: Partial<ColorRow>) => {
+    setColorRows(prev => prev.map(row => (row.id === id ? { ...row, ...patch } : row)));
   };
 
   const handleDelete = async (id: string) => {
@@ -553,22 +584,43 @@ export default function Admin() {
                 <input required type="number" name="stock" defaultValue={editingProduct?.stock} className="input-field" placeholder="100" />
               </div>
               <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image Upload</label>
-                <input name="imageFile" type="file" accept="image/*" className="input-field file:mr-4 file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:font-bold" />
-                <p className="text-[11px] text-zinc-500 mt-2">Upload prioritaire. Si vide, l'URL ci-dessous sera utilisée.</p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Image URL (fallback)</label>
-                <input name="imageUrl" defaultValue={editingProduct?.imageUrl} className="input-field" placeholder="https://..." />
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Couleurs (séparées par virgule)</label>
-                <input
-                  value={colorsInput}
-                  onChange={(e) => setColorsInput(e.target.value)}
-                  className="input-field"
-                  placeholder="Noir, Blanc, Marron"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest opacity-40 block">Couleurs + photos</label>
+                  <button type="button" onClick={addColorRow} className="text-[10px] font-black tracking-widest px-3 py-2 border border-zinc-200 hover:bg-zinc-100">+ Ajouter couleur</button>
+                </div>
+                <div className="space-y-3">
+                  {colorRows.map((row) => (
+                    <div key={row.id} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 bg-zinc-50 border border-zinc-200 p-3">
+                      <input
+                        value={row.color}
+                        onChange={(e) => updateColorRow(row.id, { color: e.target.value })}
+                        className="input-field"
+                        placeholder="Couleur ex: Blanc"
+                      />
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="input-field file:mr-4 file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:font-bold"
+                          onChange={(e) => updateColorRow(row.id, { imageFile: e.target.files?.[0] || null })}
+                        />
+                        <input
+                          value={row.imageUrl}
+                          onChange={(e) => updateColorRow(row.id, { imageUrl: e.target.value })}
+                          className="input-field"
+                          placeholder="URL fallback (optionnel)"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeColorRow(row.id)}
+                        className="px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 text-xs font-black h-fit"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="md:col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Tailles disponibles</label>

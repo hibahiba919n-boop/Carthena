@@ -12,6 +12,7 @@ export interface Product {
   imageUrl: string;
   stock: number;
   colorVariants?: ProductColorVariant[];
+  colorImages?: ProductColorImage[];
   images?: string[];
   variantStocks?: ProductVariantStock[];
   isOnPromo: boolean;
@@ -22,6 +23,11 @@ export interface Product {
 export interface ProductColorVariant {
   color: string;
   availableSizes: string[];
+}
+
+export interface ProductColorImage {
+  color: string;
+  imageUrl: string;
 }
 
 export interface ProductVariantStock {
@@ -154,7 +160,7 @@ export const getProducts = async (): Promise<Product[]> => {
     .from('products')
     .select(`
       *,
-      product_images(image_url, sort_order),
+      product_images(image_url, sort_order, color),
       product_variants(id, color, size, stock)
     `)
     .order('created_at', { ascending: false });
@@ -162,9 +168,13 @@ export const getProducts = async (): Promise<Product[]> => {
   if (error) throw error;
 
   return (data || []).map((p: any) => {
-    const images = (p.product_images || [])
+    const orderedImages = (p.product_images || [])
       .sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-      .map((img: any) => img.image_url);
+      .map((img: any) => ({ image_url: img.image_url, color: img.color || null }));
+    const images = orderedImages.map((img: any) => img.image_url);
+    const colorImages: ProductColorImage[] = orderedImages
+      .filter((img: any) => typeof img.color === 'string' && img.color.trim().length > 0)
+      .map((img: any) => ({ color: String(img.color), imageUrl: String(img.image_url) }));
     const variants: ProductVariantStock[] = (p.product_variants || []).map((v: any) => ({
       id: String(v.id),
       productId: String(p.id),
@@ -187,6 +197,7 @@ export const getProducts = async (): Promise<Product[]> => {
       style: p.style,
       description: p.description,
       imageUrl: p.image_url,
+      colorImages,
       images: images.length ? images : [p.image_url],
       stock: p.stock,
       variantStocks: variants,
@@ -215,12 +226,15 @@ export const saveProduct = async (product: Product) => {
     };
 
     let error: any;
+    let savedProductId: string | null = null;
     if (product.id && product.id.length > 15) { // UUID-like
-      const result = await client.from('products').update(payload).eq('id', product.id);
+      const result = await client.from('products').update(payload).eq('id', product.id).select('id').single();
       error = result.error;
+      savedProductId = result.data?.id ? String(result.data.id) : product.id;
     } else {
-      const result = await client.from('products').insert([payload]);
+      const result = await client.from('products').insert([payload]).select('id').single();
       error = result.error;
+      savedProductId = result.data?.id ? String(result.data.id) : null;
     }
 
     // DB sans colonne color_variants -> retry sans ce champ
@@ -228,9 +242,10 @@ export const saveProduct = async (product: Product) => {
       const fallbackPayload = { ...payload };
       delete (fallbackPayload as any).color_variants;
       const retryResult = product.id && product.id.length > 15
-        ? await client.from('products').update(fallbackPayload).eq('id', product.id)
-        : await client.from('products').insert([fallbackPayload]);
+        ? await client.from('products').update(fallbackPayload).eq('id', product.id).select('id').single()
+        : await client.from('products').insert([fallbackPayload]).select('id').single();
       error = retryResult.error;
+      savedProductId = retryResult.data?.id ? String(retryResult.data.id) : savedProductId;
     }
     
     if (error) {
@@ -243,6 +258,24 @@ export const saveProduct = async (product: Product) => {
       }
       throw error;
     }
+
+    if (!savedProductId) {
+      throw new Error("Produit enregistré mais ID introuvable pour enregistrer les images.");
+    }
+
+    // Replace product images to keep color -> image mapping consistent.
+    await client.from('product_images').delete().eq('product_id', savedProductId);
+    const rows = (product.colorImages || []).map((item, index) => ({
+      product_id: savedProductId,
+      image_url: item.imageUrl,
+      color: item.color,
+      sort_order: index
+    }));
+    if (rows.length > 0) {
+      const { error: imagesError } = await client.from('product_images').insert(rows);
+      if (imagesError) throw imagesError;
+    }
+
     return;
   }
 };

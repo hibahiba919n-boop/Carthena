@@ -35,6 +35,16 @@ export default function ProductDetail() {
   }, [product]);
 
   useEffect(() => {
+    if (!product || !selectedColor) return;
+    const match = (product.colorImages || []).find(
+      (item) => item.color.toLowerCase() === selectedColor.toLowerCase()
+    );
+    if (match?.imageUrl) {
+      setActiveImage(match.imageUrl);
+    }
+  }, [product, selectedColor]);
+
+  useEffect(() => {
     if (!id) return;
     getProductReviews(id).then(setReviews).catch(console.error);
   }, [id]);
