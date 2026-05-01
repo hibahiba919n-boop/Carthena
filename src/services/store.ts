@@ -85,6 +85,17 @@ export interface PromoValidation {
   value: number;
 }
 
+export interface PromoCode {
+  id: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  isActive: boolean;
+  startsAt?: string;
+  endsAt?: string;
+  createdAt?: string;
+}
+
 export const CATEGORIES = [
   'baggy', 'oversize', 'old money', 'streetwear', 'minimalist', 
   'jeans', 'survetements', 'polo', 'chemises', 'costumes', 
@@ -392,6 +403,51 @@ export const validatePromoCode = async (code: string): Promise<PromoValidation |
   if (data.starts_at && new Date(data.starts_at) > now) return null;
   if (data.ends_at && new Date(data.ends_at) < now) return null;
   return { code: data.code, type: data.discount_type, value: data.discount_value };
+};
+
+export const getAllPromoCodes = async (): Promise<PromoCode[]> => {
+  const client = requireSupabase();
+  const { data, error } = await client.from('promo_codes').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map((p: any) => ({
+    id: String(p.id),
+    code: p.code,
+    discountType: p.discount_type,
+    discountValue: p.discount_value,
+    isActive: p.is_active,
+    startsAt: p.starts_at,
+    endsAt: p.ends_at,
+    createdAt: p.created_at
+  }));
+};
+
+export const savePromoCode = async (promo: Omit<PromoCode, 'id' | 'createdAt'>) => {
+  const client = requireSupabase();
+  const payload = {
+    code: promo.code.trim().toUpperCase(),
+    discount_type: promo.discountType,
+    discount_value: promo.discountValue,
+    is_active: promo.isActive,
+    starts_at: promo.startsAt || null,
+    ends_at: promo.endsAt || null
+  };
+  const { error } = await client.from('promo_codes').insert([payload]);
+  if (error) {
+    if (error.code === '23505') throw new Error("Ce code promo existe déjà.");
+    throw error;
+  }
+};
+
+export const deletePromoCode = async (id: string) => {
+  const client = requireSupabase();
+  const { error } = await client.from('promo_codes').delete().eq('id', id);
+  if (error) throw error;
+};
+
+export const togglePromoCodeStatus = async (id: string, currentStatus: boolean) => {
+  const client = requireSupabase();
+  const { error } = await client.from('promo_codes').update({ is_active: !currentStatus }).eq('id', id);
+  if (error) throw error;
 };
 
 export const getOrCreateCart = async () => {

@@ -17,7 +17,8 @@ import {
   User,
   X,
   Check,
-  Ban
+  Ban,
+  Ticket
 } from 'lucide-react';
 import { 
   getProducts, 
@@ -26,8 +27,13 @@ import {
   deleteProduct, 
   updateOrderStatus,
   uploadProductImage,
+  getAllPromoCodes,
+  savePromoCode,
+  deletePromoCode,
+  togglePromoCodeStatus,
   Product, 
   Order,
+  PromoCode,
   CATEGORIES,
   STANDARD_SIZES
 } from '../services/store';
@@ -40,16 +46,19 @@ interface ColorRow {
 }
 
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<'stats' | 'products' | 'orders'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'products' | 'orders' | 'promos'>('stats');
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [promos, setPromos] = useState<PromoCode[]>([]);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const refreshData = async () => {
-    const [p, o] = await Promise.all([getProducts(), getOrders()]);
+    const [p, o, pr] = await Promise.all([getProducts(), getOrders(), getAllPromoCodes()]);
     setProducts(p || []);
     setOrders(o || []);
+    setPromos(pr || []);
   };
 
   useEffect(() => {
@@ -226,6 +235,46 @@ export default function Admin() {
     }
   };
 
+  const handleSavePromo = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const formData = new FormData(e.currentTarget);
+      await savePromoCode({
+        code: formData.get('code') as string,
+        discountType: formData.get('discountType') as 'percentage' | 'fixed',
+        discountValue: Number(formData.get('discountValue')),
+        isActive: true,
+      });
+      await refreshData();
+      setIsAddingPromo(false);
+    } catch (err: any) {
+      alert(err?.message || "Erreur lors de la création du code promo.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeletePromo = async (id: string) => {
+    if (confirm("Voulez-vous vraiment supprimer ce code promo ?")) {
+      try {
+        await deletePromoCode(id);
+        await refreshData();
+      } catch (err: any) {
+        alert(err?.message || "Erreur lors de la suppression.");
+      }
+    }
+  };
+
+  const handleTogglePromo = async (id: string, currentStatus: boolean) => {
+    try {
+      await togglePromoCodeStatus(id, currentStatus);
+      await refreshData();
+    } catch (err: any) {
+      alert(err?.message || "Erreur.");
+    }
+  };
+
   // Stats
   const totalRevenue = (orders || []).reduce((acc, order) => {
     if (order.status === 'refused') return acc;
@@ -288,6 +337,7 @@ export default function Admin() {
             { id: 'stats', label: 'ANALYTICS', icon: BarChart3 },
             { id: 'products', label: 'INVENTORY', icon: Package },
             { id: 'orders', label: 'LOGISTICS', icon: ShoppingBag },
+            { id: 'promos', label: 'PROMOS', icon: Ticket },
           ].map(tab => (
             <button
               key={tab.id}
@@ -576,7 +626,113 @@ export default function Admin() {
               )}
           </motion.div>
         )}
+
+        {activeTab === 'promos' && (
+          <motion.div 
+            key="promos"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-8"
+          >
+            <button 
+              onClick={() => setIsAddingPromo(true)}
+              className="btn-primary w-full md:w-auto flex items-center justify-center gap-2"
+            >
+              <Plus size={18} /> CRÉER UN CODE PROMO
+            </button>
+
+            <div className="bg-white border border-zinc-200 overflow-x-auto">
+              <table className="w-full text-left min-w-[600px]">
+                <thead className="bg-zinc-50 border-b border-zinc-100 font-black text-[10px] tracking-widest uppercase">
+                  <tr>
+                    <th className="p-6">Code</th>
+                    <th className="p-6">Type / Valeur</th>
+                    <th className="p-6">Statut</th>
+                    <th className="p-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {promos.map(promo => (
+                    <tr key={promo.id} className={`transition-colors ${promo.isActive ? 'hover:bg-zinc-50/50' : 'bg-zinc-50 opacity-60'}`}>
+                      <td className="p-6 font-mono font-bold text-lg">{promo.code}</td>
+                      <td className="p-6 font-bold">
+                        {promo.discountType === 'percentage' ? `${promo.discountValue}%` : `${promo.discountValue.toLocaleString()} DZD`}
+                      </td>
+                      <td className="p-6">
+                        <span className={`text-[10px] font-black tracking-widest uppercase px-2 py-1 ${promo.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {promo.isActive ? 'ACTIF' : 'INACTIF'}
+                        </span>
+                      </td>
+                      <td className="p-6 text-right">
+                        <div className="flex justify-end gap-3">
+                          <button 
+                            onClick={() => handleTogglePromo(promo.id, promo.isActive)}
+                            className="flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-zinc-200 rounded text-[10px] font-black uppercase tracking-widest transition-colors"
+                          >
+                            {promo.isActive ? 'DÉSACTIVER' : 'ACTIVER'}
+                          </button>
+                          <button 
+                            onClick={() => handleDeletePromo(promo.id)}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-[10px] font-black uppercase tracking-widest transition-colors shadow-md"
+                          >
+                            <Trash2 size={14} /> SUPPRIMER
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {promos.length === 0 && (
+                <div className="py-20 text-center opacity-30 font-mono text-sm uppercase">AUCUN CODE PROMO ACTIF</div>
+              )}
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
+
+      {/* Promo Modal */}
+      {isAddingPromo && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-ink/90 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white w-full max-w-md p-12 relative"
+          >
+            <button 
+              onClick={() => setIsAddingPromo(false)}
+              className="absolute top-8 right-8 p-2 hover:bg-zinc-100 rounded-full"
+            >
+              <X size={24} />
+            </button>
+            <h2 className="text-3xl font-black mb-8 uppercase">NOUVEAU CODE PROMO</h2>
+            <form onSubmit={handleSavePromo} className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">CODE</label>
+                <input required name="code" className="input-field uppercase font-mono" placeholder="EX: SUMMER20" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">TYPE DE RÉDUCTION</label>
+                <select required name="discountType" className="input-field">
+                  <option value="percentage">Pourcentage (%)</option>
+                  <option value="fixed">Montant fixe (DZD)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">VALEUR</label>
+                <input required type="number" name="discountValue" min={1} className="input-field" placeholder="Ex: 20" />
+              </div>
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className="btn-primary w-full text-lg mt-4 disabled:opacity-50"
+              >
+                {isSaving ? 'CRÉATION...' : 'CRÉER LE CODE'}
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Product Modal */}
       {(isAddingProduct || editingProduct) && (
