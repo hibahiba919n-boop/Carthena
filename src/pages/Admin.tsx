@@ -79,8 +79,11 @@ export default function Admin() {
     const stockMap: Record<string, Record<string, number>> = {};
     (editingProduct.variantStocks || []).forEach((item) => {
       const colorKey = item.color.toLowerCase();
-      if (!stockMap[colorKey]) stockMap[colorKey] = {};
-      stockMap[colorKey][item.size.toUpperCase()] = item.stock || 0;
+      const row = rows.find(r => r.color.toLowerCase() === colorKey);
+      if (row) {
+        if (!stockMap[row.id]) stockMap[row.id] = {};
+        stockMap[row.id][item.size.toUpperCase()] = item.stock || 0;
+      }
     });
 
     setColorRows(rows);
@@ -104,10 +107,10 @@ export default function Admin() {
           if (!imageUrl) {
             throw new Error(`Veuillez ajouter une image pour la couleur "${color}".`);
           }
-          return { color, imageUrl };
+          return { id: row.id, color, imageUrl };
         })
       );
-      const validColorRows = uploadedRows.filter(Boolean) as { color: string; imageUrl: string }[];
+      const validColorRows = uploadedRows.filter(Boolean) as { id: string; color: string; imageUrl: string }[];
       if (!validColorRows.length) {
         throw new Error("Ajoutez au moins une couleur avec image.");
       }
@@ -115,16 +118,14 @@ export default function Admin() {
 
       const normalizedStyle = ((formData.get('style') as string) || '').trim().toLowerCase();
       const variants = validColorRows.length
-        ? validColorRows.map(({ color }) => {
-            const colorKey = color.toLowerCase();
-            const sizeMap = variantStockMap[colorKey] || {};
+        ? validColorRows.map(({ id: rowId, color }) => {
+            const sizeMap = variantStockMap[rowId] || {};
             const availableSizes = STANDARD_SIZES.filter((size) => (sizeMap[size] || 0) > 0);
             return { color, availableSizes };
           })
         : undefined;
-      const variantStocks = validColorRows.flatMap(({ color }) => {
-        const colorKey = color.toLowerCase();
-        const sizeMap = variantStockMap[colorKey] || {};
+      const variantStocks = validColorRows.flatMap(({ id: rowId, color }) => {
+        const sizeMap = variantStockMap[rowId] || {};
         return STANDARD_SIZES
           .filter((size) => (sizeMap[size] || 0) > 0)
           .map((size) => ({
@@ -172,14 +173,11 @@ export default function Admin() {
   const removeColorRow = (id: string) => {
     setColorRows(prev => {
       if (prev.length === 1) return prev;
-      const target = prev.find((row) => row.id === id);
-      if (target?.color) {
-        setVariantStockMap((old) => {
-          const copy = { ...old };
-          delete copy[target.color.toLowerCase()];
-          return copy;
-        });
-      }
+      setVariantStockMap((old) => {
+        const copy = { ...old };
+        delete copy[id];
+        return copy;
+      });
       return prev.filter(row => row.id !== id);
     });
   };
@@ -187,31 +185,16 @@ export default function Admin() {
   const updateColorRow = (id: string, patch: Partial<ColorRow>) => {
     setColorRows(prev => prev.map(row => {
       if (row.id !== id) return row;
-      if (patch.color !== undefined) {
-        const oldKey = row.color.toLowerCase();
-        const newKey = patch.color.toLowerCase();
-        if (oldKey !== newKey) {
-          setVariantStockMap((old) => {
-            const copy = { ...old };
-            if (old[oldKey] && !old[newKey]) {
-              copy[newKey] = old[oldKey];
-            }
-            if (oldKey) delete copy[oldKey];
-            return copy;
-          });
-        }
-      }
       return { ...row, ...patch };
     }));
   };
 
-  const setVariantQty = (color: string, size: string, raw: string) => {
-    const colorKey = color.toLowerCase();
+  const setVariantQty = (rowId: string, size: string, raw: string) => {
     const value = Math.max(0, Number(raw || 0));
     setVariantStockMap((prev) => ({
       ...prev,
-      [colorKey]: {
-        ...(prev[colorKey] || {}),
+      [rowId]: {
+        ...(prev[rowId] || {}),
         [size]: Number.isFinite(value) ? value : 0
       }
     }));
@@ -683,7 +666,6 @@ export default function Admin() {
                 <label className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 block">Stock par couleur et taille</label>
                 <div className="space-y-3">
                   {colorRows.filter((row) => row.color.trim()).map((row) => {
-                    const colorKey = row.color.toLowerCase();
                     return (
                       <div key={row.id} className="border border-zinc-200 p-3">
                         <p className="text-xs font-black uppercase mb-3">{row.color}</p>
@@ -694,8 +676,8 @@ export default function Admin() {
                               <input
                                 type="number"
                                 min={0}
-                                value={variantStockMap[colorKey]?.[size] ?? 0}
-                                onChange={(e) => setVariantQty(row.color, size, e.target.value)}
+                                value={variantStockMap[row.id]?.[size] ?? 0}
+                                onChange={(e) => setVariantQty(row.id, size, e.target.value)}
                                 className="input-field h-10 py-1"
                               />
                             </div>
