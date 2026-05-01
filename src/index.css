@@ -50,3 +50,22 @@
 .input-field {
   @apply w-full bg-white border border-zinc-200 px-4 py-3 outline-none focus:border-ink transition-colors;
 }
+
+@media (max-width: 640px) {
+  .btn-primary,
+  .btn-outline {
+    @apply px-4 py-3 text-sm;
+  }
+
+  .input-field {
+    @apply px-3 py-3 text-sm;
+  }
+
+  h1 {
+    @apply text-3xl leading-tight;
+  }
+
+  h2 {
+    @apply text-2xl leading-tight;
+  }
+}

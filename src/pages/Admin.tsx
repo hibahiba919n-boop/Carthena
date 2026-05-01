@@ -373,7 +373,7 @@ export default function Admin() {
                     <tr key={product.id} className="hover:bg-zinc-50/50 transition-colors">
                       <td className="p-6">
                         <div className="flex items-center gap-4">
-                          <img src={product.imageUrl} className="w-12 h-16 object-cover bg-zinc-100" />
+                          <img src={product.imageUrl} loading="lazy" decoding="async" className="w-12 h-16 object-cover bg-zinc-100" />
                           <div>
                             <p className="font-bold">{product.name}</p>
                             <p className="text-xs opacity-50 uppercase">{product.brand}</p>

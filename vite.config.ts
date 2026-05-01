@@ -21,11 +21,18 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
+      chunkSizeWarningLimit: 900,
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-          },
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react-router')) return 'router';
+              if (id.includes('lucide-react')) return 'icons';
+              if (id.includes('@supabase')) return 'supabase';
+              if (id.includes('motion')) return 'motion';
+              return 'vendor';
+            }
+          }
         },
       },
     },

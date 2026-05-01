@@ -22,8 +22,8 @@ export default function Cart() {
   );
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12">
-      <h1 className="text-4xl font-black tracking-tight uppercase mb-8">Panier</h1>
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <h1 className="text-3xl sm:text-4xl font-black tracking-tight uppercase mb-8">Panier</h1>
       {items.length === 0 ? (
         <div className="bg-white border border-zinc-200 p-10 text-center">
           <p className="text-zinc-500 mb-6">Votre panier est vide.</p>
@@ -33,8 +33,8 @@ export default function Cart() {
         <div className="grid lg:grid-cols-[1fr_320px] gap-8">
           <div className="space-y-4">
             {items.map((item) => (
-              <div key={item.id} className="bg-white border border-zinc-200 p-4 flex items-center gap-4">
-                <img src={item.imageUrl} className="w-20 h-24 object-cover bg-zinc-100" />
+              <div key={item.id} className="bg-white border border-zinc-200 p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+                <img src={item.imageUrl} loading="lazy" decoding="async" className="w-16 sm:w-20 h-20 sm:h-24 object-cover bg-zinc-100" />
                 <div className="flex-1">
                   <p className="font-bold">{item.productName}</p>
                   <p className="text-xs opacity-50">{item.selectedColor || "-"} / {item.selectedSize || "-"}</p>

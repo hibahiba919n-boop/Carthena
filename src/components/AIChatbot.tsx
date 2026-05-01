@@ -78,7 +78,7 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
             className="fixed top-0 right-0 h-full w-full max-w-xl bg-beige z-[60] shadow-2xl flex flex-col"
           >
             {/* Header */}
-            <div className="p-8 border-b border-zinc-200 flex justify-between items-center bg-white">
+            <div className="p-4 sm:p-8 border-b border-zinc-200 flex justify-between items-center bg-white">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-ink rounded-full flex items-center justify-center text-beige">
                   <Sparkles size={20} />
@@ -94,7 +94,7 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
             </div>
 
             {/* Chat Area */}
-            <div ref={scrollRef} className="flex-grow overflow-y-auto p-8 space-y-8">
+            <div ref={scrollRef} className="flex-grow overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8">
               {messages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center text-center px-12">
                   <div className="w-20 h-20 bg-white border border-zinc-200 rounded-full flex items-center justify-center mb-8 shadow-xl">
@@ -143,7 +143,7 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
                                       onClick={onClose}
                                       className="flex items-center gap-4 bg-zinc-50 p-4 hover:bg-zinc-100 transition-colors border border-zinc-100"
                                     >
-                                      <img src={p.imageUrl} className="w-12 h-16 object-cover" />
+                                      <img src={p.imageUrl} loading="lazy" decoding="async" className="w-12 h-16 object-cover" />
                                       <div className="flex-grow">
                                         <p className="text-xs font-bold uppercase tracking-tight">{p.name}</p>
                                         <p className="text-[10px] font-mono opacity-50">{p.price.toLocaleString()} DZD</p>
@@ -181,8 +181,8 @@ export default function AIChatbot({ isOpen, onClose }: { isOpen: boolean; onClos
             </div>
 
             {/* Input Area */}
-            <div className="p-8 bg-white border-t border-zinc-200">
-              <div className="flex gap-4">
+            <div className="p-4 sm:p-8 bg-white border-t border-zinc-200">
+              <div className="flex gap-3 sm:gap-4">
                 <input 
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

@@ -4,20 +4,18 @@
  */
 
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { ShoppingBag, Menu, X, MessageSquare, Heart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getProducts, Product } from './services/store';
 
-// Pages
-import Home from './pages/Home';
-import Shop from './pages/Shop';
-import Admin from './pages/Admin';
-import ProductDetail from './pages/ProductDetail';
-import Checkout from './pages/Checkout';
-import Cart from './pages/Cart';
-import TrackOrder from './pages/TrackOrder';
-import AIChatbot from './components/AIChatbot';
+const Home = lazy(() => import('./pages/Home'));
+const Shop = lazy(() => import('./pages/Shop'));
+const Admin = lazy(() => import('./pages/Admin'));
+const ProductDetail = lazy(() => import('./pages/ProductDetail'));
+const Checkout = lazy(() => import('./pages/Checkout'));
+const Cart = lazy(() => import('./pages/Cart'));
+const TrackOrder = lazy(() => import('./pages/TrackOrder'));
+const AIChatbot = lazy(() => import('./components/AIChatbot'));
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -31,7 +29,7 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-zinc-100">
-      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
         <Link to="/" className="text-2xl font-black tracking-tighter hover:opacity-80 transition-opacity">
           CARTHENA
         </Link>
@@ -51,7 +49,7 @@ const Navbar = () => {
           ))}
         </div>
 
-        <div className="flex items-center space-x-6">
+        <div className="flex items-center space-x-3 sm:space-x-6">
           <Link to="/track" className="hover:opacity-60 transition-opacity">
             <Heart size={20} />
           </Link>
@@ -74,7 +72,7 @@ const Navbar = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="absolute top-20 left-0 w-full bg-white border-b border-zinc-100 p-8 flex flex-col space-y-6 md:hidden shadow-xl"
+            className="absolute top-16 sm:top-20 left-0 w-full bg-white border-b border-zinc-100 p-6 sm:p-8 flex flex-col space-y-5 sm:space-y-6 md:hidden shadow-xl"
           >
             {links.map((link) => (
               <Link 
@@ -112,16 +110,18 @@ function AppContent({ showAI, setShowAI }: { showAI: boolean, setShowAI: (v: boo
       {!isAdminPage && <Navbar />}
       
       <main className={`flex-grow ${isAdminPage ? '' : 'pt-20'}`}>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/shop" element={<Shop />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/checkout/:id" element={<Checkout />} />
-          <Route path="/track" element={<TrackOrder />} />
-          <Route path="/admin" element={<Admin />} />
-        </Routes>
+        <Suspense fallback={<div className="py-24 text-center text-sm tracking-widest opacity-50">LOADING...</div>}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/checkout/:id" element={<Checkout />} />
+            <Route path="/track" element={<TrackOrder />} />
+            <Route path="/admin" element={<Admin />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {!isAdminPage && (
@@ -169,7 +169,11 @@ function AppContent({ showAI, setShowAI }: { showAI: boolean, setShowAI: (v: boo
         </motion.button>
       )}
 
-      {!isAdminPage && <AIChatbot isOpen={showAI} onClose={() => setShowAI(false)} />}
+      {!isAdminPage && (
+        <Suspense fallback={null}>
+          <AIChatbot isOpen={showAI} onClose={() => setShowAI(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

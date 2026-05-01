@@ -37,20 +37,20 @@ export default function Shop() {
   }, [products, activeFilter, searchQuery]);
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12">
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 sm:mb-16 gap-6 sm:gap-8">
         <div>
-          <h1 className="text-4xl font-black tracking-tight mb-2 uppercase">The Catalog</h1>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2 uppercase">The Catalog</h1>
           <p className="text-zinc-500">{filteredProducts.length} results found</p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full md:w-auto">
           <input 
             type="text" 
             placeholder="SEARCH PRODUCTS..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="input-field max-w-xs py-2 h-12"
+            className="input-field w-full sm:max-w-xs py-2 h-12"
           />
           <button 
             onClick={() => setShowFilters(!showFilters)}
@@ -94,7 +94,7 @@ export default function Shop() {
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-16">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8 sm:gap-y-16">
         {filteredProducts.map((product, idx) => (
           <motion.div
             key={product.id}
@@ -113,6 +113,9 @@ export default function Shop() {
                 <img 
                   src={product.imageUrl} 
                   alt={product.name} 
+                  loading="lazy"
+                  decoding="async"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <button
@@ -130,15 +133,15 @@ export default function Shop() {
               </div>
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-black tracking-widest opacity-30 uppercase">{product.brand}</span>
-                <h3 className="text-xl font-bold tracking-tight h-14 line-clamp-2">{product.name}</h3>
+                <h3 className="text-base sm:text-xl font-bold tracking-tight h-12 sm:h-14 line-clamp-2">{product.name}</h3>
                 <div className="flex items-center gap-3">
                   {product.isOnPromo && product.discountedPrice ? (
                     <>
-                      <span className="text-xl font-black">{product.discountedPrice.toLocaleString()} DZD</span>
+                      <span className="text-base sm:text-xl font-black">{product.discountedPrice.toLocaleString()} DZD</span>
                       <span className="text-sm line-through opacity-30">{product.price.toLocaleString()} DZD</span>
                     </>
                   ) : (
-                    <span className="text-xl font-black">{product.price.toLocaleString()} DZD</span>
+                    <span className="text-base sm:text-xl font-black">{product.price.toLocaleString()} DZD</span>
                   )}
                 </div>
               </div>

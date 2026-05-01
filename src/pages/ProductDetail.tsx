@@ -78,19 +78,19 @@ export default function ProductDetail() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 md:py-20">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 md:py-20">
       <Link to="/shop" className="inline-flex items-center gap-2 text-xs font-bold tracking-widest opacity-40 hover:opacity-100 transition-opacity mb-12 uppercase">
         <ArrowLeft size={14} /> Back to Catalog
       </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-16 lg:gap-24">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-16 lg:gap-24">
         {/* Product Image */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           className="aspect-[3/4] bg-white overflow-hidden border border-zinc-100"
         >
-          <img src={currentImage} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+          <img src={currentImage} alt={product.name} loading="eager" decoding="async" className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
         </motion.div>
 
         {/* Product Info */}
@@ -100,7 +100,7 @@ export default function ProductDetail() {
            className="flex flex-col"
         >
           <span className="text-xs font-black tracking-[0.3em] opacity-30 uppercase mb-4">{product.brand}</span>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tighter uppercase mb-6">{product.name}</h1>
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter uppercase mb-6">{product.name}</h1>
           
           <div className="flex items-center gap-4 mb-10">
             {product.isOnPromo && product.discountedPrice ? (
@@ -123,7 +123,7 @@ export default function ProductDetail() {
             <div className="flex gap-3 mb-8 overflow-x-auto">
               {product.images.map((img) => (
                 <button key={img} type="button" onClick={() => setActiveImage(img)} className={`w-16 h-20 border ${currentImage === img ? 'border-ink' : 'border-zinc-200'}`}>
-                  <img src={img} className="w-full h-full object-cover" />
+                  <img src={img} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

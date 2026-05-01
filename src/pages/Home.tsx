@@ -14,11 +14,14 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="relative h-[90vh] flex items-center justify-center overflow-hidden bg-zinc-900">
+      <section className="relative h-[75vh] sm:h-[90vh] flex items-center justify-center overflow-hidden bg-zinc-900">
         <div className="absolute inset-0 opacity-40">
           <img 
             src="https://images.unsplash.com/photo-1558769132-cb1aea458c5e?auto=format&fit=crop&q=80&w=2000" 
             alt="Hero Streetwear" 
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         </div>
@@ -26,7 +29,7 @@ export default function Home() {
           <motion.h1 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter text-beige mb-8"
+            className="text-4xl md:text-7xl lg:text-8xl font-black tracking-tighter text-beige mb-8"
           >
             THE NEW ERA OF <br /> STREETWEAR.
           </motion.h1>
@@ -43,8 +46,8 @@ export default function Home() {
       </section>
 
       {/* Featured Collection */}
-      <section className="py-32 px-6 max-w-7xl mx-auto w-full">
-        <div className="flex justify-between items-end mb-16">
+      <section className="py-16 sm:py-32 px-4 sm:px-6 max-w-7xl mx-auto w-full">
+        <div className="flex justify-between items-end mb-10 sm:mb-16 gap-4">
           <div>
             <h2 className="text-4xl font-black tracking-tight mb-4 uppercase">Latest Drops</h2>
             <p className="text-zinc-500 max-w-md">Limited release silhouettes designed with attention to every seam.</p>
@@ -54,7 +57,7 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-12">
           {products.map((product, idx) => (
             <motion.div
               key={product.id}
@@ -69,6 +72,9 @@ export default function Home() {
                   <img 
                     src={product.imageUrl} 
                     alt={product.name} 
+                    loading="lazy"
+                    decoding="async"
+                    sizes="(max-width: 768px) 100vw, 33vw"
                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />
                 </div>

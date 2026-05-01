@@ -121,16 +121,16 @@ export default function Checkout() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-12 md:py-24">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 md:py-24">
       <AnimatePresence mode="wait">
         {!isSuccess ? (
-          <motion.div key="form" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="grid grid-cols-1 lg:grid-cols-2 gap-20">
+          <motion.div key="form" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-20">
             <div>
-              <h1 className="text-4xl font-black tracking-tighter uppercase mb-2">Order Finalization</h1>
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tighter uppercase mb-2">Order Finalization</h1>
               <p className="text-zinc-500 mb-12">No account required. Enter your delivery coordinates below.</p>
 
               <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <label className="text-[10px] font-black tracking-widest opacity-40 mb-2 block uppercase">Last Name / Nom</label>
                     <input required name="lastName" className="input-field" placeholder="LAST NAME" />
@@ -177,7 +177,7 @@ export default function Checkout() {
               <div className="space-y-4 mb-8 max-h-[220px] overflow-y-auto pr-2">
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex gap-4">
-                    <img src={item.imageUrl} className="w-16 h-20 object-cover bg-zinc-100" />
+                    <img src={item.imageUrl} loading="lazy" decoding="async" className="w-16 h-20 object-cover bg-zinc-100" />
                     <div>
                       <h3 className="font-bold text-sm uppercase">{item.productName}</h3>
                       <p className="text-[10px] opacity-50">{item.selectedColor || "-"} / {item.selectedSize || "-"}</p>

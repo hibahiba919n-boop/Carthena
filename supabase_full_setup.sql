@@ -114,6 +114,23 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+-- Reconcile existing orders table (important if table already existed)
+alter table public.orders add column if not exists selected_size text;
+alter table public.orders add column if not exists selected_color text;
+alter table public.orders add column if not exists subtotal numeric(12,2);
+alter table public.orders add column if not exists shipping_fee numeric(12,2);
+alter table public.orders add column if not exists promo_code text;
+alter table public.orders add column if not exists discount_amount numeric(12,2);
+alter table public.orders add column if not exists total_amount numeric(12,2);
+alter table public.orders add column if not exists tracking_token text;
+
+-- Backfill tracking tokens for old rows, then enforce uniqueness
+update public.orders
+set tracking_token = upper(substr(md5(random()::text || clock_timestamp()::text), 1, 10))
+where tracking_token is null or tracking_token = '';
+
+create unique index if not exists idx_orders_tracking_unique on public.orders(tracking_token);
+
 create table if not exists public.order_tracking_events (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id) on delete cascade,
