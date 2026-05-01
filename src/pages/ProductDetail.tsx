@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, Heart, ShoppingBag, Truck, ShieldCheck } from 'lucide-react';
-import { addProductReview, addToCart, getProductReviews, getProducts, Product, Review, toggleWishlistProduct } from '../services/store';
+import { addProductReview, addToCart, getProductReviews, getProducts, Product, Review, toggleWishlistProduct, getWishlistProductIds } from '../services/store';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -15,6 +15,7 @@ export default function ProductDetail() {
   const [reviewName, setReviewName] = useState('');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
+  const [isWishlisted, setIsWishlisted] = useState(false);
 
   useEffect(() => {
     getProducts().then(products => {
@@ -48,6 +49,7 @@ export default function ProductDetail() {
   useEffect(() => {
     if (!id) return;
     getProductReviews(id).then(setReviews).catch(console.error);
+    getWishlistProductIds().then(ids => setIsWishlisted(ids.includes(id))).catch(console.error);
   }, [id]);
 
   useEffect(() => {
@@ -86,6 +88,16 @@ export default function ProductDetail() {
     }
     await addToCart(product, 1, selectedSize || undefined, selectedColor || undefined);
     alert("Ajouté au panier.");
+  };
+
+  const handleToggleWishlist = async () => {
+    if (!product) return;
+    try {
+      const added = await toggleWishlistProduct(product.id);
+      setIsWishlisted(added);
+    } catch (err) {
+      console.error("Failed to toggle wishlist", err);
+    }
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -222,10 +234,15 @@ export default function ProductDetail() {
             <ShoppingBag size={18} /> ADD TO CART
           </button>
           <button
-            onClick={() => toggleWishlistProduct(product.id)}
-            className="btn-outline flex items-center justify-center gap-2 text-sm py-4"
+            onClick={handleToggleWishlist}
+            className={`flex items-center justify-center gap-2 text-sm py-4 transition-all duration-300 ${
+              isWishlisted 
+                ? 'bg-red-50 text-red-600 border border-red-200 shadow-sm' 
+                : 'btn-outline'
+            }`}
           >
-            <Heart size={18} /> WISHLIST
+            <Heart size={18} fill={isWishlisted ? "currentColor" : "none"} /> 
+            {isWishlisted ? 'IN WISHLIST' : 'WISHLIST'}
           </button>
           <button 
             disabled={product.stock <= 0}
