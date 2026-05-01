@@ -361,11 +361,13 @@ export const decrementVariantStock = async (productId: string, color: string, si
     .eq('product_id', productId)
     .eq('color', color)
     .eq('size', size)
-    .single();
+    .maybeSingle();
   if (error) throw error;
-  const newStock = Math.max(0, (data.stock || 0) - quantity);
-  const { error: updateError } = await client.from('product_variants').update({ stock: newStock }).eq('id', data.id);
-  if (updateError) throw updateError;
+  if (data) {
+    const newStock = Math.max(0, (data.stock || 0) - quantity);
+    const { error: updateError } = await client.from('product_variants').update({ stock: newStock }).eq('id', data.id);
+    if (updateError) throw updateError;
+  }
 };
 
 export const getShippingFeeByWilaya = async (wilaya: string): Promise<number> => {

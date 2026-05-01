@@ -104,9 +104,9 @@ export default function Checkout() {
       await clearCart();
       setTrackingToken(tokens[0] || "");
       setIsSuccess(true);
-      setTimeout(() => navigate("/"), 5000);
-    } catch (error) {
-      alert("Erreur checkout. Réessayez.");
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      alert("Erreur checkout: " + (error?.message || JSON.stringify(error)));
       if (btn) btn.disabled = false;
     }
   };
@@ -212,16 +212,24 @@ export default function Checkout() {
             </div>
           </motion.div>
         ) : (
-          <motion.div key="success" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-40 max-w-xl mx-auto">
+          <motion.div key="success" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20 max-w-xl mx-auto">
             <div className="inline-flex items-center justify-center w-24 h-24 bg-zinc-900 text-beige rounded-full mb-12">
               <CheckCircle2 size={48} />
             </div>
             <h1 className="text-5xl font-black tracking-tighter uppercase mb-6">Order Logged.</h1>
-            <p className="text-zinc-500 font-light text-lg mb-12">Votre commande a été enregistrée avec succès.</p>
-            <div className="bg-white border border-zinc-200 p-6 flex justify-between items-center rounded-sm">
-              <span className="text-[10px] font-black tracking-widest opacity-40 uppercase">Tracking Token</span>
-              <span className="font-mono text-xs font-bold">#{trackingToken}</span>
+            <p className="text-zinc-500 font-light text-lg mb-8">Votre commande a été enregistrée avec succès.</p>
+            
+            <div className="bg-red-50 border border-red-100 text-red-800 p-6 rounded-sm mb-8 text-left">
+              <p className="font-bold mb-2 uppercase text-sm">⚠️ Attention : Conservez ce code</p>
+              <p className="text-sm opacity-90">Ce Tracking Token est indispensable pour suivre l'état de votre livraison ou pour toute réclamation. Prenez une capture d'écran ou notez-le soigneusement avant de quitter cette page.</p>
             </div>
+
+            <div className="bg-white border border-zinc-200 p-6 flex justify-between items-center rounded-sm mb-12">
+              <span className="text-[10px] font-black tracking-widest opacity-40 uppercase">Tracking Token</span>
+              <span className="font-mono text-xl font-black tracking-widest">{trackingToken}</span>
+            </div>
+
+            <Link to="/" className="btn-primary inline-flex">Retour à la boutique</Link>
           </motion.div>
         )}
       </AnimatePresence>

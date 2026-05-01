@@ -103,7 +103,7 @@ create table if not exists public.orders (
   customer_first_name text not null,
   phone text not null,
   wilaya text not null,
-  product_id uuid not null references public.products(id),
+  product_id uuid references public.products(id) on delete set null,
   product_name text not null,
   selected_size text,
   selected_color text,
@@ -116,6 +116,11 @@ create table if not exists public.orders (
   status text not null default 'pending' check (status in ('pending','processed','shipped','delivered','refused')),
   created_at timestamptz not null default now()
 );
+
+-- Fix existing orders table constraints if it already exists
+alter table public.orders drop constraint if exists orders_product_id_fkey;
+alter table public.orders alter column product_id drop not null;
+alter table public.orders add constraint orders_product_id_fkey foreign key (product_id) references public.products(id) on delete set null;
 
 -- Reconcile existing orders table (important if table already existed)
 alter table public.orders add column if not exists selected_size text;
