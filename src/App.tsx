@@ -5,7 +5,7 @@
 
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useState } from 'react';
-import { ShoppingBag, Menu, X, MessageSquare, Heart } from 'lucide-react';
+import { ShoppingBag, Menu, X, MessageSquare, Heart, Store } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -57,7 +57,7 @@ const Navbar = () => {
             <ShoppingBag size={20} />
           </Link>
           <Link to="/shop" className="hover:opacity-60 transition-opacity">
-            <ShoppingBag size={20} />
+            <Store size={20} />
           </Link>
           <button onClick={() => setIsOpen(!isOpen)} className="md:hidden">
             {isOpen ? <X size={24} /> : <Menu size={24} />}

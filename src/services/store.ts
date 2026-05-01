@@ -131,6 +131,12 @@ export const uploadProductImage = async (file: File): Promise<string> => {
   });
 
   if (uploadError) {
+    if (String(uploadError.message).toLowerCase().includes('row-level security')) {
+      throw new Error(
+        "Upload image échoué: politique RLS Storage manquante. " +
+        "Exécutez `supabase_full_setup.sql` (section Storage policies) dans Supabase SQL Editor."
+      );
+    }
     throw new Error(`Upload image échoué: ${uploadError.message}`);
   }
 
@@ -420,7 +426,12 @@ export const getWishlistProductIds = async (): Promise<string[]> => {
   const client = requireSupabase();
   const sessionId = getOrCreateSessionId();
   const { data, error } = await client.from('wishlists').select('product_id').eq('session_id', sessionId);
-  if (error) throw error;
+  if (error) {
+    if (error.code === '42P01') {
+      throw new Error("Table wishlists introuvable. Exécutez le script SQL Supabase complet.");
+    }
+    throw error;
+  }
   return (data || []).map((row: any) => String(row.product_id));
 };
 
@@ -433,14 +444,24 @@ export const toggleWishlistProduct = async (productId: string) => {
     .eq('session_id', sessionId)
     .eq('product_id', productId)
     .maybeSingle();
-  if (existing.error && existing.error.code !== 'PGRST116') throw existing.error;
+  if (existing.error && existing.error.code !== 'PGRST116') {
+    if (existing.error.code === '42P01') {
+      throw new Error("Table wishlists introuvable. Exécutez le script SQL Supabase complet.");
+    }
+    throw existing.error;
+  }
   if (existing.data?.id) {
     const { error } = await client.from('wishlists').delete().eq('id', existing.data.id);
     if (error) throw error;
     return false;
   }
   const { error } = await client.from('wishlists').insert([{ session_id: sessionId, product_id: productId }]);
-  if (error) throw error;
+  if (error) {
+    if (error.code === '42501') {
+      throw new Error("Wishlist bloquée par RLS. Exécutez les policies SQL du script Supabase.");
+    }
+    throw error;
+  }
   return true;
 };
 
